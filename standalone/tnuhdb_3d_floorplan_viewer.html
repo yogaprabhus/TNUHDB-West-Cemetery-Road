@@ -1,0 +1,3048 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>TNUHDB West Cemetery Road — Interactive 3D & 2D Architectural Floor Plan Explorer</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+    body, html {
+      margin: 0; padding: 0; width: 100%; height: 100%; height: 100dvh; overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #0b0f17; color: #f1f5f9;
+      overscroll-behavior: none;
+    }
+    #three-canvas, #plan2d-canvas {
+      touch-action: none;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    @media (max-width: 640px) {
+      .room-label-3d {
+        padding: 2px 6px;
+        font-size: 9.5px;
+        border-radius: 5px;
+      }
+      .joinery-tag-3d {
+        padding: 1px 4px;
+        font-size: 8.5px;
+      }
+    }
+    .font-mono-code { font-family: 'JetBrains Mono', monospace; }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.84);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+    }
+    .glass-pill {
+      background: rgba(30, 41, 59, 0.78);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .glass-pill:hover {
+      background: rgba(51, 65, 85, 0.88);
+      border-color: rgba(56, 189, 248, 0.45);
+    }
+    .glass-pill.active {
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.28), rgba(37, 99, 235, 0.34));
+      border-color: #38bdf8;
+      color: #ffffff;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.25);
+    }
+    .room-label-3d {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+      cursor: pointer;
+      padding: 4px 9px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      background: rgba(15, 23, 42, 0.86);
+      color: #f8fafc;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+      white-space: nowrap;
+      transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+      z-index: 15;
+    }
+    .room-label-3d:hover {
+      transform: translate(-50%, -50%) scale(1.07);
+      border-color: #38bdf8;
+      background: rgba(14, 116, 144, 0.92);
+    }
+    .room-label-3d.selected {
+      border-color: #f59e0b;
+      background: rgba(180, 83, 9, 0.94);
+      box-shadow: 0 0 16px rgba(245, 158, 11, 0.55);
+    }
+    .joinery-tag-3d {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+      cursor: pointer;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 9.5px;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      background: rgba(30, 58, 138, 0.88);
+      color: #bae6fd;
+      border: 1px solid rgba(56, 189, 248, 0.5);
+      white-space: nowrap;
+      z-index: 14;
+    }
+    .joinery-tag-3d:hover {
+      background: #0284c7;
+      color: #fff;
+    }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.4); }
+    ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.7); }
+    input[type="range"] {
+      accent-color: #38bdf8;
+    }
+  </style>
+</head>
+<body class="flex flex-col h-screen w-screen overflow-hidden select-none">
+
+  <!-- LOADING OVERLAY -->
+  <div id="loading-overlay" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/95 transition-opacity duration-500">
+    <div class="w-16 h-16 rounded-2xl bg-sky-500/10 border border-sky-400/30 flex items-center justify-center mb-4 shadow-lg shadow-sky-500/10">
+      <svg class="w-9 h-9 text-sky-400 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
+      </svg>
+    </div>
+    <h1 class="text-lg font-semibold text-white tracking-tight">Constructing 3D Architectural Environment</h1>
+    <p id="loading-status" class="text-xs text-slate-400 mt-1 font-mono-code">Synthesizing PBR textures, CAD walls (0.20m / 0.10m) & Schedule of Joinery...</p>
+    <div class="w-64 h-1.5 bg-slate-800 rounded-full overflow-hidden mt-4">
+      <div id="loading-bar" class="h-full bg-gradient-to-r from-sky-400 to-blue-500 transition-all duration-300" style="width: 35%"></div>
+    </div>
+  </div>
+
+  <!-- TOP NAVIGATION & MODE BAR (MOBILE-FIRST & DESKTOP RESPONSIVE) -->
+  <header class="glass-panel z-30 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 border-b border-slate-800/80 shrink-0">
+    <!-- Top Row on Mobile / Left Group on Desktop -->
+    <div class="flex items-center justify-between sm:justify-start gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <button id="btn-toggle-left" class="p-1.5 rounded-lg glass-pill text-slate-200 hover:text-white lg:hidden shrink-0" title="Rooms & Camera Angles">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-sky-500 to-blue-700 flex items-center justify-center font-bold text-xs text-white shadow shrink-0">
+          3D
+        </div>
+        <div class="truncate">
+          <div class="flex items-center gap-1.5">
+            <span class="font-semibold text-xs sm:text-sm text-white tracking-tight truncate">TNUHDB West Cemetery Rd</span>
+            <span class="hidden md:inline-block text-[10px] font-mono-code px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">SHEET 02/15</span>
+          </div>
+          <p class="text-[10px] text-slate-400 hidden sm:block">Tondiarpet Village, Chennai • Stilt+09 Floors (792 Units)</p>
+        </div>
+      </div>
+
+      <!-- Mobile-Only Right Drawer Toggle & Reset -->
+      <div class="flex items-center gap-1 sm:hidden shrink-0">
+        <button id="btn-mobile-cad" class="glass-pill px-2 py-1 rounded-lg text-[11px] font-medium text-sky-300" title="Original CAD Sheet">
+          CAD
+        </button>
+        <button id="btn-toggle-right-mobile" class="p-1.5 rounded-lg glass-pill text-slate-200 hover:text-white lg:hidden" title="Layers & Settings">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Second Row on Mobile (Horizontally Scrollable Strip) / Center+Right on Desktop -->
+    <div class="flex items-center justify-between gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+      <div class="flex items-center gap-1.5 shrink-0">
+        <!-- Unit Selector -->
+        <div class="flex items-center bg-slate-900/90 p-0.5 rounded-lg border border-slate-700/70 shrink-0" role="group" aria-label="Unit Selection">
+          <button id="unit-btn-general" data-unit="general" class="unit-btn glass-pill active px-2 sm:px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-medium flex items-center gap-1 whitespace-nowrap">
+            <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+            <span>General Unit</span>
+            <span class="text-[10px] font-mono-code text-slate-300 hidden md:inline">26.27m²</span>
+          </button>
+          <button id="unit-btn-pwd" data-unit="pwd" class="unit-btn glass-pill px-2 sm:px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-medium flex items-center gap-1 whitespace-nowrap">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>PwD Unit</span>
+            <span class="text-[10px] font-mono-code text-slate-300 hidden md:inline">28.08m²</span>
+          </button>
+          <button id="unit-btn-both" data-unit="both" class="unit-btn glass-pill px-2 sm:px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-medium flex items-center gap-1 whitespace-nowrap">
+            <span>Both Side-by-Side</span>
+          </button>
+        </div>
+
+        <!-- Primary View Mode Switcher -->
+        <div class="flex items-center bg-slate-900/90 p-0.5 rounded-lg border border-slate-700/70 shrink-0" role="group" aria-label="View Mode">
+          <button id="mode-btn-orbit" data-mode="orbit" class="mode-btn glass-pill active px-2 sm:px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-medium flex items-center gap-1 whitespace-nowrap">
+            <svg class="w-3.5 h-3.5 text-sky-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            <span>3D Orbit</span>
+          </button>
+          <button id="mode-btn-walk" data-mode="walk" class="mode-btn glass-pill px-2 sm:px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-medium flex items-center gap-1 whitespace-nowrap">
+            <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="m9 20 3-6 3 6"/><path d="m6 8 6 2 6-2"/><path d="M12 10v4"/></svg>
+            <span>1st-Person Walk</span>
+          </button>
+          <button id="mode-btn-plan2d" data-mode="plan2d" class="mode-btn glass-pill px-2 sm:px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-medium flex items-center gap-1 whitespace-nowrap">
+            <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            <span>2D Floor Plan</span>
+          </button>
+          <button id="mode-btn-split" data-mode="split" class="mode-btn glass-pill px-2 sm:px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-medium flex items-center gap-1 whitespace-nowrap">
+            <svg class="w-3.5 h-3.5 text-purple-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>
+            <span>Split 2D+3D</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Right: Quick Actions -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button id="btn-toggle-markings" class="glass-pill active px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium flex items-center gap-1 text-slate-200 whitespace-nowrap" title="Show or Hide All Markings, Labels & Dimensions (Shortcut: M)">
+          <svg class="w-3.5 h-3.5 text-sky-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+          <span id="markings-state-label">Markings: Shown</span>
+        </button>
+        <button id="btn-remove-doors" class="glass-pill active px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium flex items-center gap-1 text-slate-200 whitespace-nowrap" title="Show or Remove All Doors in 3D & 2D (Shortcut: X)">
+          <svg class="w-3.5 h-3.5 text-rose-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          <span id="remove-doors-label">Doors: Shown</span>
+        </button>
+        <button id="btn-toggle-doors" class="glass-pill px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium flex items-center gap-1 text-slate-200 whitespace-nowrap" title="Open or Close All Doors (Shortcut: E)">
+          <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/></svg>
+          <span id="doors-state-label">Doors: Closed</span>
+        </button>
+        <button id="btn-open-cad-modal" class="glass-pill px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium hidden sm:flex items-center gap-1 text-sky-300 whitespace-nowrap" title="Inspect Uploaded CAD Blueprint & Joinery Schedule">
+          <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span class="hidden md:inline">Original CAD & Specs</span>
+        </button>
+        <button id="btn-reset-camera" class="glass-pill px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium flex items-center gap-1 text-slate-200 whitespace-nowrap" title="Reset Camera to Overview (Shortcut: R)">
+          <svg class="w-3.5 h-3.5 text-sky-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          <span class="hidden sm:inline">Reset</span>
+        </button>
+        <button id="btn-toggle-right" class="hidden sm:inline-flex p-1.5 rounded-lg glass-pill text-slate-300 hover:text-white lg:hidden" title="Toggle Visibility & Settings">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE -->
+  <div class="relative flex-1 flex overflow-hidden">
+
+    <!-- MOBILE DRAWER BACKDROP -->
+    <div id="mobile-drawer-backdrop" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-20 hidden lg:hidden"></div>
+
+    <!-- LEFT SIDEBAR: ROOM EXPLORER & INSPECTOR -->
+    <aside id="left-sidebar" class="glass-panel z-30 w-72 sm:w-80 max-w-[86vw] flex flex-col border-r border-slate-800/80 transition-transform duration-300 absolute lg:static inset-y-0 left-0 -translate-x-full lg:translate-x-0 shrink-0">
+      <!-- Unit Summary Header -->
+      <div class="p-3 border-b border-slate-800/80">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-sky-400" id="sidebar-unit-title">General Unit Plan</span>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-mono-code font-semibold text-emerald-400" id="sidebar-unit-area">26.27 sq.m</span>
+            <button id="btn-close-left-drawer" class="lg:hidden glass-pill px-2 py-0.5 rounded text-xs text-slate-300 hover:text-white">✕</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-1.5 mt-2 text-center">
+          <div class="bg-slate-900/90 rounded-md p-1.5 border border-slate-800">
+            <div class="text-[10px] text-slate-400">Footprint</div>
+            <div class="text-xs font-mono-code font-semibold text-white">6.6 × 5.8m</div>
+          </div>
+          <div class="bg-slate-900/90 rounded-md p-1.5 border border-slate-800">
+            <div class="text-[10px] text-slate-400">Ext / Int Wall</div>
+            <div class="text-xs font-mono-code font-semibold text-white">0.20 / 0.10m</div>
+          </div>
+          <div class="bg-slate-900/90 rounded-md p-1.5 border border-slate-800">
+            <div class="text-[10px] text-slate-400">Ceiling Ht</div>
+            <div class="text-xs font-mono-code font-semibold text-white" id="metric-ceiling-ht">2.90m</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Room List -->
+      <div class="p-3 border-b border-slate-800/80 flex-1 overflow-y-auto">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-300">Spaces & Rooms</h2>
+          <button id="btn-clear-room" class="text-[11px] text-sky-400 hover:underline hidden">Show Entire Unit</button>
+        </div>
+        <div id="room-list-container" class="space-y-1.5"></div>
+
+        <!-- Selected Room Detailed Inspector -->
+        <div id="room-detail-card" class="mt-3 p-3 rounded-xl bg-slate-900/95 border border-sky-500/30 hidden">
+          <div class="flex items-center justify-between">
+            <h3 id="detail-room-name" class="text-sm font-bold text-white">Hall (Living / Dining)</h3>
+            <span id="detail-room-badge" class="text-[10px] font-mono-code px-2 py-0.5 rounded bg-sky-500/20 text-sky-300">7.50 m²</span>
+          </div>
+          <p id="detail-room-desc" class="text-xs text-slate-300 mt-1 leading-relaxed"></p>
+          <div class="grid grid-cols-2 gap-1.5 mt-2.5 text-[11px]">
+            <div class="bg-slate-950/70 p-1.5 rounded border border-slate-800">
+              <span class="text-slate-400 block text-[10px]">CAD Dimensions</span>
+              <span id="detail-room-dims" class="font-mono-code text-slate-100 font-medium">3.00m × 2.50m</span>
+            </div>
+            <div class="bg-slate-950/70 p-1.5 rounded border border-slate-800">
+              <span class="text-slate-400 block text-[10px]">Floor Finish</span>
+              <span id="detail-room-floor" class="text-slate-100 font-medium">Vitrified Tile</span>
+            </div>
+          </div>
+          <div class="mt-2.5">
+            <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">Joinery & Openings in Room</span>
+            <div id="detail-room-joinery" class="flex flex-wrap gap-1"></div>
+          </div>
+          <div class="mt-2.5">
+            <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">Fixtures & Furniture</span>
+            <div id="detail-room-furniture" class="text-[11px] text-slate-300"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-1.5 mt-3">
+            <button id="btn-focus-selected-room" class="glass-pill active py-1.5 px-2 rounded-lg text-xs font-medium text-center">
+              Focus 3D View
+            </button>
+            <button id="btn-walk-selected-room" class="glass-pill py-1.5 px-2 rounded-lg text-xs font-medium text-center text-amber-300">
+              Teleport Inside
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Camera Angle Presets -->
+      <div class="p-3 bg-slate-950/60">
+        <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Camera View Presets</div>
+        <div class="grid grid-cols-3 gap-1.5">
+          <button data-cam="iso" class="cam-preset-btn glass-pill py-1.5 px-2 rounded text-[11px] font-medium">Isometric</button>
+          <button data-cam="top" class="cam-preset-btn glass-pill py-1.5 px-2 rounded text-[11px] font-medium">Top Ortho</button>
+          <button data-cam="front" class="cam-preset-btn glass-pill py-1.5 px-2 rounded text-[11px] font-medium">Front (S)</button>
+          <button data-cam="back" class="cam-preset-btn glass-pill py-1.5 px-2 rounded text-[11px] font-medium">Rear (N)</button>
+          <button data-cam="left" class="cam-preset-btn glass-pill py-1.5 px-2 rounded text-[11px] font-medium">West (L)</button>
+          <button data-cam="right" class="cam-preset-btn glass-pill py-1.5 px-2 rounded text-[11px] font-medium">East (R)</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER VIEWPORT AREA (3D WebGL + 2D Interactive Canvas) -->
+    <main id="viewport-wrapper" class="relative flex-1 flex flex-col md:flex-row h-full w-full overflow-hidden bg-slate-950">
+
+      <!-- 3D WebGL Container -->
+      <div id="webgl-pane" class="relative flex-1 h-full overflow-hidden">
+        <canvas id="three-canvas" tabindex="0" class="w-full h-full block outline-none"></canvas>
+        <!-- Dynamic 3D HTML Floating Labels Container -->
+        <div id="labels-3d-container" class="absolute inset-0 pointer-events-none overflow-hidden"></div>
+
+        <!-- First-Person Crosshair & HUD -->
+        <div id="fp-crosshair" class="hidden absolute inset-0 pointer-events-none flex items-center justify-center z-20">
+          <div class="w-5 h-5 relative flex items-center justify-center">
+            <div class="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_8px_#f59e0b]"></div>
+            <div class="absolute w-4 h-[1px] bg-white/50"></div>
+            <div class="absolute h-4 w-[1px] bg-white/50"></div>
+          </div>
+        </div>
+
+        <!-- First-Person Banner & Controls Overlay (Mobile & Desktop Responsive) -->
+        <div id="fp-hud-banner" class="hidden absolute top-2 left-2 right-2 sm:top-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-25 glass-panel px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-amber-500/40 shadow-xl flex flex-wrap items-center justify-between sm:justify-start gap-2 sm:gap-3">
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <span class="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-amber-400 animate-ping"></span>
+            <span class="text-[11px] sm:text-xs font-semibold text-white">Walkthrough</span>
+            <span id="fp-current-room-badge" class="text-[11px] sm:text-xs font-mono-code px-1.5 sm:px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Hall</span>
+          </div>
+          <div class="text-[11px] text-slate-300 hidden md:block">
+            <kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-mono-code text-[10px]">WASD</kbd> / Arrows or D-Pad to Walk • Tap Floor to Move • Drag to Look
+          </div>
+          <button id="btn-exit-walk" class="px-2 sm:px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-[11px] sm:text-xs transition">
+            Exit to Overview
+          </button>
+        </div>
+
+        <!-- Touch / On-Screen First-Person D-Pad & Look Controls -->
+        <div id="fp-touch-controls" class="hidden absolute bottom-12 sm:bottom-14 left-2 right-2 sm:left-4 sm:right-4 z-25 flex items-end justify-between pointer-events-none">
+          <!-- Movement D-Pad -->
+          <div class="glass-panel p-1.5 sm:p-2 rounded-2xl pointer-events-auto grid grid-cols-3 gap-1 w-28 h-28 sm:w-32 sm:h-32 shadow-lg">
+            <div></div>
+            <button data-move="forward" class="fp-dpad-btn glass-pill rounded-lg flex items-center justify-center text-white text-sm active:bg-sky-500">▲</button>
+            <div></div>
+            <button data-move="left" class="fp-dpad-btn glass-pill rounded-lg flex items-center justify-center text-white text-sm active:bg-sky-500">◀</button>
+            <div class="flex items-center justify-center text-[8px] sm:text-[9px] font-mono-code text-slate-400">MOVE</div>
+            <button data-move="right" class="fp-dpad-btn glass-pill rounded-lg flex items-center justify-center text-white text-sm active:bg-sky-500">▶</button>
+            <div></div>
+            <button data-move="backward" class="fp-dpad-btn glass-pill rounded-lg flex items-center justify-center text-white text-sm active:bg-sky-500">▼</button>
+            <div></div>
+          </div>
+
+          <!-- Look & Door Controls -->
+          <div class="glass-panel p-1.5 sm:p-2 rounded-2xl pointer-events-auto flex flex-col gap-1 sm:gap-1.5">
+            <div class="text-[8px] sm:text-[9px] font-mono-code text-center text-slate-400">LOOK / DOORS</div>
+            <div class="flex gap-1">
+              <button data-look="left" class="fp-look-btn glass-pill px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-[11px] sm:text-xs font-semibold">⟲ Left</button>
+              <button data-look="right" class="fp-look-btn glass-pill px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-[11px] sm:text-xs font-semibold">Right ⟳</button>
+            </div>
+            <button id="btn-fp-door-interact" class="glass-pill py-1 px-2 rounded-lg text-[11px] font-medium text-amber-300 border border-amber-500/40">
+              Open / Close Door (E)
+            </button>
+            <button id="btn-fp-remove-doors" class="glass-pill py-1 px-2 rounded-lg text-[11px] font-medium text-rose-300 border border-rose-500/40">
+              Show / Remove Doors
+            </button>
+          </div>
+        </div>
+
+        <!-- Bottom Status & Scale Bar -->
+        <div class="absolute bottom-3 left-3 right-3 z-15 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+          <div class="glass-panel px-3 py-1.5 rounded-lg text-[11px] text-slate-300 flex items-center gap-3 pointer-events-auto">
+            <span id="status-coords" class="font-mono-code text-sky-300">X: 3.30m, Z: 2.90m</span>
+            <span class="text-slate-600">|</span>
+            <span id="status-hover-info">Click any room floor or door in 3D/2D to inspect</span>
+          </div>
+          <div id="scale-bar-hud" class="glass-panel px-3 py-1.5 rounded-lg text-[11px] font-mono-code text-slate-300 hidden sm:flex items-center gap-2 pointer-events-auto">
+            <span>SCALE 1:100 (METERS)</span>
+            <div class="w-16 h-2 border-b-2 border-l-2 border-r-2 border-sky-400 relative">
+              <span class="absolute -top-3.5 left-0 text-[9px] text-sky-400">0</span>
+              <span class="absolute -top-3.5 right-0 text-[9px] text-sky-400">1.0m</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2D FLOOR PLAN PANE (Full in 2D mode, or 45% width in Split mode) -->
+      <div id="plan2d-pane" class="hidden relative h-full bg-slate-950 border-l border-slate-800 flex-col overflow-hidden">
+        <!-- 2D Toolbar -->
+        <div class="glass-panel px-3 py-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 z-10">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold text-emerald-400">2D Architectural CAD Blueprint</span>
+            <span class="text-[10px] font-mono-code px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">Aligned 1:1 with 3D</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button id="btn-2d-toggle-markings" class="glass-pill active px-2 py-1 rounded-md text-xs font-medium text-sky-300" title="Show or Hide All 2D & 3D Markings (Shortcut: M)">
+              Markings: ON
+            </button>
+            <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer glass-pill px-2 py-1 rounded-md">
+              <input type="checkbox" id="chk-2d-cad-overlay" class="rounded accent-sky-400" />
+              <span>Overlay Scanned Sheet</span>
+            </label>
+            <button id="btn-2d-zoom-in" class="glass-pill px-2 py-1 rounded text-xs font-mono-code" title="Zoom In 2D">+</button>
+            <button id="btn-2d-zoom-out" class="glass-pill px-2 py-1 rounded text-xs font-mono-code" title="Zoom Out 2D">−</button>
+            <button id="btn-2d-reset" class="glass-pill px-2 py-1 rounded text-xs">Fit</button>
+          </div>
+        </div>
+        <!-- 2D Interactive Canvas -->
+        <div class="relative flex-1 w-full h-full overflow-hidden">
+          <canvas id="plan2d-canvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- RIGHT SIDEBAR: VISIBILITY, CUTAWAY, LIGHTING & WALKTHROUGH SETTINGS -->
+    <aside id="right-sidebar" class="glass-panel z-30 w-72 max-w-[86vw] flex flex-col border-l border-slate-800/80 transition-transform duration-300 absolute lg:static inset-y-0 right-0 translate-x-full lg:translate-x-0 shrink-0 overflow-y-auto">
+      <!-- Wall Cutaway Mode -->
+      <div class="p-3 border-b border-slate-800/80">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-300">Wall Cutaway & Section Mode</span>
+          <button id="btn-close-right-drawer" class="lg:hidden glass-pill px-2 py-0.5 rounded text-xs text-slate-300 hover:text-white">✕</button>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5">
+          <button data-wallmode="full" class="wallmode-btn glass-pill active py-1.5 px-2 rounded-lg text-xs font-medium">Full Height (2.9m)</button>
+          <button data-wallmode="cutaway" class="wallmode-btn glass-pill py-1.5 px-2 rounded-lg text-xs font-medium">Dollhouse (1.3m)</button>
+          <button data-wallmode="xray" class="wallmode-btn glass-pill py-1.5 px-2 rounded-lg text-xs font-medium">Glass X-Ray</button>
+          <button data-wallmode="none" class="wallmode-btn glass-pill py-1.5 px-2 rounded-lg text-xs font-medium">Slab Only (0.15m)</button>
+        </div>
+      </div>
+
+      <!-- Layer Visibility Toggles -->
+      <div class="p-3 border-b border-slate-800/80">
+        <div class="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">Architectural Layer Visibility</div>
+        <div class="space-y-2 text-xs">
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-300">Exterior Walls (0.20m)</span>
+            <input type="checkbox" id="vis-ext-walls" checked class="w-4 h-4 rounded accent-sky-400" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-300">Interior Partitions (0.10m)</span>
+            <input type="checkbox" id="vis-int-walls" checked class="w-4 h-4 rounded accent-sky-400" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-300">Doors (MD, UD, D, D1, BD, SD)</span>
+            <input type="checkbox" id="vis-doors" checked class="w-4 h-4 rounded accent-rose-400" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-300">Windows & Ventilators</span>
+            <input type="checkbox" id="vis-joinery" checked class="w-4 h-4 rounded accent-sky-400" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-300">Furniture & Sanitaryware</span>
+            <input type="checkbox" id="vis-furniture" checked class="w-4 h-4 rounded accent-sky-400" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-300">Kitchen / Bath Overhead Lofts</span>
+            <input type="checkbox" id="vis-lofts" checked class="w-4 h-4 rounded accent-sky-400" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-300">Upper Ceiling / Roof Slab</span>
+            <input type="checkbox" id="vis-ceiling" class="w-4 h-4 rounded accent-sky-400" />
+          </label>
+          <div class="pt-2 mt-2 border-t border-slate-800/80 flex items-center justify-between">
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-sky-400">Markings & Annotations</span>
+            <button id="btn-sidebar-markings-all" class="glass-pill active px-2 py-0.5 rounded text-[10px] font-mono-code text-sky-300">
+              Hide All
+            </button>
+          </div>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-300">Room Name & Area Tags</span>
+            <input type="checkbox" id="vis-room-labels" checked class="w-4 h-4 rounded accent-sky-400" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-300">Joinery Code Tags (MD, KW...)</span>
+            <input type="checkbox" id="vis-joinery-labels" checked class="w-4 h-4 rounded accent-sky-400" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-300">CAD Dimension Lines</span>
+            <input type="checkbox" id="vis-dimensions" checked class="w-4 h-4 rounded accent-sky-400" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-300">Floor Grid & Access Markings</span>
+            <input type="checkbox" id="vis-floor-markings" checked class="w-4 h-4 rounded accent-sky-400" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Lighting & Environment -->
+      <div class="p-3 border-b border-slate-800/80">
+        <div class="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">Lighting & Atmosphere</div>
+        <div class="grid grid-cols-2 gap-1.5 mb-3">
+          <button data-light="day" class="light-btn glass-pill active py-1 px-2 rounded text-xs">Daylight Sun</button>
+          <button data-light="golden" class="light-btn glass-pill py-1 px-2 rounded text-xs">Golden Hour</button>
+          <button data-light="evening" class="light-btn glass-pill py-1 px-2 rounded text-xs">Warm Interior</button>
+          <button data-light="studio" class="light-btn glass-pill py-1 px-2 rounded text-xs">Bright Studio</button>
+        </div>
+        <div class="space-y-2.5 text-xs">
+          <div>
+            <div class="flex justify-between text-[11px] text-slate-400 mb-0.5">
+              <span>Sun Angle / Azimuth</span>
+              <span id="lbl-sun-angle" class="font-mono-code text-slate-200">135°</span>
+            </div>
+            <input type="range" id="slider-sun-angle" min="0" max="360" value="135" class="w-full h-1.5 bg-slate-800 rounded-lg cursor-pointer" />
+          </div>
+          <div>
+            <div class="flex justify-between text-[11px] text-slate-400 mb-0.5">
+              <span>Wall / Ceiling Height</span>
+              <span id="lbl-wall-height" class="font-mono-code text-slate-200">2.90m</span>
+            </div>
+            <input type="range" id="slider-wall-height" min="2.4" max="3.4" step="0.05" value="2.90" class="w-full h-1.5 bg-slate-800 rounded-lg cursor-pointer" />
+          </div>
+        </div>
+      </div>
+
+      <!-- First-Person Navigation Settings -->
+      <div class="p-3">
+        <div class="text-xs font-semibold uppercase tracking-wider text-amber-400 mb-2">1st-Person Walkthrough Config</div>
+        <div class="space-y-2.5 text-xs">
+          <div>
+            <span class="text-[11px] text-slate-400 block mb-1">Movement Speed</span>
+            <div class="grid grid-cols-3 gap-1">
+              <button data-speed="1.6" class="speed-btn glass-pill py-1 rounded text-[11px]">Slow</button>
+              <button data-speed="2.8" class="speed-btn glass-pill active py-1 rounded text-[11px]">Normal</button>
+              <button data-speed="4.5" class="speed-btn glass-pill py-1 rounded text-[11px]">Fast</button>
+            </div>
+          </div>
+          <div>
+            <span class="text-[11px] text-slate-400 block mb-1">Camera Eye Height</span>
+            <div class="grid grid-cols-2 gap-1">
+              <button data-eye="1.62" class="eye-btn glass-pill active py-1 rounded text-[11px]">Standing (1.62m)</button>
+              <button data-eye="1.18" class="eye-btn glass-pill py-1 rounded text-[11px]">Wheelchair (1.18m)</button>
+            </div>
+          </div>
+          <label class="flex items-center justify-between cursor-pointer pt-1">
+            <span class="text-slate-300">Wall & Furniture Collision</span>
+            <input type="checkbox" id="chk-fp-collision" checked class="w-4 h-4 rounded accent-amber-400" />
+          </label>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- MODAL: UPLOADED CAD REFERENCE, SCHEDULE OF JOINERY & ARCHITECTURAL NOTES -->
+  <div id="cad-modal" class="fixed inset-0 z-50 hidden bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6">
+    <div class="glass-panel w-full max-w-5xl max-h-[90vh] rounded-2xl border border-slate-700 shadow-2xl flex flex-col overflow-hidden">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+        <div>
+          <h2 class="text-sm sm:text-base font-bold text-white">Original CAD Drawing & Schedule of Joinery Verification</h2>
+          <p class="text-xs text-slate-400">Tamil Nadu Urban Habitat Development Board • West Cemetery Road, Sheet No. 02/15</p>
+        </div>
+        <button id="btn-close-cad-modal" class="glass-pill px-3 py-1 rounded-lg text-xs font-semibold text-slate-200 hover:text-white">Close ✕</button>
+      </div>
+      <div class="p-4 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Upright CAD Drawing Image -->
+        <div class="bg-slate-900 rounded-xl p-2 border border-slate-800 flex flex-col">
+          <span class="text-xs font-semibold text-sky-400 mb-2">Supplied 2D Floor Plan Sheet (Auto-Rotated Upright)</span>
+          <img id="cad-reference-img" src="../public/assets/floorplan_upright.jpg" alt="TNUHDB West Cemetery Road Unit Plan" class="w-full h-auto rounded-lg border border-slate-700 object-contain" />
+        </div>
+        <!-- Extracted Schedule of Joinery & Architectural Fidelity Report -->
+        <div class="space-y-3 text-xs">
+          <div class="bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+            <h3 class="font-semibold text-emerald-400 mb-1.5">Schedule of Joinery Per Tenement (Exact CAD Specs)</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse font-mono-code text-[11px]">
+                <thead>
+                  <tr class="border-b border-slate-700 text-slate-400">
+                    <th class="py-1 pr-2">Code</th>
+                    <th class="py-1 pr-2">Description</th>
+                    <th class="py-1 pr-2">Size (W × H)</th>
+                    <th class="py-1">Sill Ht</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/80 text-slate-200">
+                  <tr><td class="py-1 font-bold text-sky-300">MD</td><td>Main Door (General Unit)</td><td>1.00 × 2.10 m</td><td>0.00 m</td></tr>
+                  <tr><td class="py-1 font-bold text-emerald-300">UD</td><td>Universal Door (PwD Unit)</td><td>1.00 × 2.10 m</td><td>0.00 m</td></tr>
+                  <tr><td class="py-1 font-bold text-sky-300">D</td><td>Bedroom Door</td><td>0.90 × 2.10 m</td><td>0.00 m</td></tr>
+                  <tr><td class="py-1 font-bold text-sky-300">BD</td><td>Balcony Door</td><td>0.90 × 2.10 m</td><td>0.00 m</td></tr>
+                  <tr><td class="py-1 font-bold text-sky-300">D1</td><td>Bath / WC Door</td><td>0.75 × 2.10 m</td><td>0.00 m</td></tr>
+                  <tr><td class="py-1 font-bold text-emerald-300">SD</td><td>Sliding Door (PwD Hall–Bed)</td><td>2.50 × 2.10 m</td><td>0.00 m</td></tr>
+                  <tr><td class="py-1 font-bold text-emerald-300">SD1</td><td>Sliding Door (PwD Bed–Bath)</td><td>1.00 × 2.10 m</td><td>0.00 m</td></tr>
+                  <tr><td class="py-1 font-bold text-amber-300">O1</td><td>Hall–Kitchen Cased Opening</td><td>1.80 × 2.10 m</td><td>0.00 m</td></tr>
+                  <tr><td class="py-1 font-bold text-amber-300">O</td><td>Kitchen–Passage Opening</td><td>1.30 × 2.10 m</td><td>0.00 m</td></tr>
+                  <tr><td class="py-1 font-bold text-purple-300">SW/NV</td><td>Sliding Window + N-Ventilator</td><td>0.90×0.90 & 1.20×0.60m</td><td>0.90 m</td></tr>
+                  <tr><td class="py-1 font-bold text-purple-300">W</td><td>Hall Side Window</td><td>0.90 × 1.35 m</td><td>0.75 m</td></tr>
+                  <tr><td class="py-1 font-bold text-purple-300">KW</td><td>Kitchen Window</td><td>1.00 × 1.05 m</td><td>1.05 m</td></tr>
+                  <tr><td class="py-1 font-bold text-purple-300">OGW</td><td>Openable Grill Window (Balcony)</td><td>0.90 × 0.90 m</td><td>1.05 m</td></tr>
+                  <tr><td class="py-1 font-bold text-purple-300">V / V1</td><td>Ventilator / N-Type Ventilator</td><td>0.60×0.60 / 1.70×0.60m</td><td>1.95 m</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="bg-slate-900/90 p-3 rounded-xl border border-slate-800 space-y-1.5 text-slate-300 leading-relaxed">
+            <h3 class="font-semibold text-sky-400">Visible vs. Inferred Architectural Details</h3>
+            <p><strong class="text-white">Directly from Drawing:</strong> Overall 6.60m × 5.80m footprint; 0.20m exterior walls and 0.10m interior partitions; exact room dimensions (Hall 3.00×2.50m, Bedroom 3.10×2.50m, Kitchen 1.80×2.50m, Bath 1.00×1.40m, Balcony 1.00×1.40m, Passage 1.00×1.30m, WC 0.90×1.20m, OTS 1.00×1.30m; PwD Accessible Toilet 2.00×2.70m with 1.50m wheelchair turning circle); furniture/fixture positions (Fridge, L-counter sink & hob, WM, sofa chairs, coffee table, double bed, wardrobe, sanitaryware).</p>
+            <p><strong class="text-white">Inferred for 3D Visualization:</strong> Default 2.90m floor-to-ceiling height (adjustable via slider from 2.40m to 3.40m) to accommodate 2.10m door lintels plus 0.60m upper ventilators and overhead storage lofts; neutral modern Indian residential finishes (ivory vitrified tiles, teak main door, black granite kitchen slab, brushed steel fixtures).</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APPLICATION SCRIPT -->
+  <script>
+    (function() {
+      'use strict';
+
+      // =========================================================================
+      // 1. ARCHITECTURAL CAD DATASET (GENERAL UNIT & PwD ACCESSIBLE UNIT)
+      //    Coordinate System:
+      //    X: 0.00m (West/Left) -> 6.60m (East/Right)
+      //    Z: 0.00m (North/Rear/Top of sheet) -> 5.80m (South/Front/Bottom of sheet)
+      //    Y: 0.00m (Finished Floor Level) -> state.wallHeight (Default 2.90m)
+      // =========================================================================
+
+      const JOINERY_SPECS = {
+        'MD':    { code: 'MD',    name: 'Main Door',                         w: 1.00, h: 2.10, sill: 0.00, kind: 'door',      color: '#7c3f1c' },
+        'UD':    { code: 'UD',    name: 'Universal Door (Accessible)',       w: 1.00, h: 2.10, sill: 0.00, kind: 'door',      color: '#0d9488' },
+        'D':     { code: 'D',     name: 'Bedroom Interior Door',             w: 0.90, h: 2.10, sill: 0.00, kind: 'door',      color: '#8b5a2b' },
+        'BD':    { code: 'BD',    name: 'Balcony Door',                      w: 0.90, h: 2.10, sill: 0.00, kind: 'door',      color: '#64748b' },
+        'D1':    { code: 'D1',    name: 'Bath / WC Door',                    w: 0.75, h: 2.10, sill: 0.00, kind: 'door',      color: '#475569' },
+        'SD':    { code: 'SD',    name: 'Accessible Sliding Door',           w: 2.50, h: 2.10, sill: 0.00, kind: 'sliding',   color: '#0f766e' },
+        'SD1':   { code: 'SD1',   name: 'Bath Sliding Door',                 w: 1.00, h: 2.10, sill: 0.00, kind: 'sliding',   color: '#0f766e' },
+        'O1':    { code: 'O1',    name: 'Hall–Kitchen Cased Opening',        w: 1.80, h: 2.10, sill: 0.00, kind: 'opening',   color: '#cbd5e1' },
+        'O':     { code: 'O',     name: 'Kitchen–Passage Opening',           w: 1.30, h: 2.10, sill: 0.00, kind: 'opening',   color: '#cbd5e1' },
+        'W':     { code: 'W',     name: 'Casement Window',                   w: 0.90, h: 1.35, sill: 0.75, kind: 'window',    color: '#38bdf8' },
+        'KW':    { code: 'KW',    name: 'Kitchen Window',                    w: 1.00, h: 1.05, sill: 1.05, kind: 'window',    color: '#38bdf8' },
+        'OGW':   { code: 'OGW',   name: 'Openable Grill Window',             w: 0.90, h: 0.90, sill: 1.05, kind: 'grill',     color: '#94a3b8' },
+        'V':     { code: 'V',     name: 'Louvered Ventilator',               w: 0.60, h: 0.60, sill: 1.95, kind: 'vent',      color: '#a855f7' },
+        'V1':    { code: 'V1',    name: 'N-Type Kitchen Ventilator',         w: 1.70, h: 0.60, sill: 1.95, kind: 'vent',      color: '#a855f7' },
+        'SW/NV': { code: 'SW/NV', name: 'Sliding Window & N-Ventilator',     w: 1.15, h: 1.55, sill: 0.85, kind: 'swnv',      color: '#38bdf8' }
+      };
+
+      const UNITS_DATA = {
+        general: {
+          id: 'general',
+          name: 'General Unit',
+          carpetArea: '26.27 sq.m',
+          envelope: { width: 6.60, depth: 5.80 },
+          rooms: [
+            {
+              id: 'hall',
+              name: 'Hall (Living & Dining)',
+              shortLabel: 'HALL\n3.00×2.50',
+              dimsText: '3.00m × 2.50m',
+              areaSqm: 7.50,
+              bounds: { x1: 0.20, z1: 3.10, x2: 3.20, z2: 5.60 },
+              floorType: 'vitrified_ivory',
+              floorLabel: '600×600 Ivory Vitrified Tile',
+              color2d: 'rgba(56, 189, 248, 0.18)',
+              stroke2d: '#38bdf8',
+              joineryCodes: ['MD', 'SW/NV', 'W', 'O1', 'D'],
+              furnitureList: '2 Lounge Armchairs, Center Coffee Table, Wall TV Unit & Media Console, Ceiling Fan',
+              desc: 'Primary living and dining hall entered via the 1.00m Main Door (MD) on the south facade. Naturally lit by a front SW/NV window-ventilator assembly and a 0.90m northwest window (W), connecting directly to the Kitchen via the 1.80m opening (O1) and Bedroom via Door (D).',
+              spawn: { x: 2.60, z: 4.55, yaw: 0 }
+            },
+            {
+              id: 'bedroom',
+              name: 'Bedroom',
+              shortLabel: 'BEDROOM\n3.10×2.50',
+              dimsText: '3.10m × 2.50m',
+              areaSqm: 7.75,
+              bounds: { x1: 3.30, z1: 3.10, x2: 6.40, z2: 5.60 },
+              floorType: 'vitrified_warm',
+              floorLabel: 'Warm Beige Vitrified Tile',
+              color2d: 'rgba(168, 85, 247, 0.18)',
+              stroke2d: '#c084fc',
+              joineryCodes: ['D', 'SW/NV', 'D1', 'BD'],
+              furnitureList: 'Queen Bed (1.60×2.00m) with Headboard & Pillows, Full-Height Built-in Wardrobe & Loft along West Wall, Bedside Table',
+              desc: 'Spacious 3.10m × 2.50m bedroom with built-in wardrobe niche along the western partition wall, south-facing SW/NV window + ventilator, direct access to the Bathroom (D1) and private utility Balcony (BD).',
+              spawn: { x: 4.18, z: 3.62, yaw: 3.14 }
+            },
+            {
+              id: 'kitchen',
+              name: 'Kitchen',
+              shortLabel: 'KITCHEN\n1.80×2.50',
+              dimsText: '1.80m × 2.50m',
+              areaSqm: 4.86,
+              bounds: { x1: 1.40, z1: 0.20, x2: 3.20, z2: 2.90 },
+              floorType: 'terracotta_tile',
+              floorLabel: 'Matte Ceramic Kitchen Tile',
+              color2d: 'rgba(245, 158, 11, 0.18)',
+              stroke2d: '#fbbf24',
+              joineryCodes: ['O1', 'KW', 'V1', 'O'],
+              furnitureList: 'L-Shaped Black Granite Countertop, Stainless Steel Sink & Drainboard, 2-Burner Gas Hob, Refrigerator (Fridge), Overhead Storage Loft',
+              desc: 'Ergonomic L-shaped kitchen featuring a rear Kitchen Window (KW 1.00×1.05m) over the sink, side N-Type Ventilator (V1 1.70×0.60m) over the cooking hob, dedicated Fridge alcove, overhead loft, and 1.30m opening (O) to the rear utility passage.',
+              spawn: { x: 2.45, z: 1.85, yaw: 0 }
+            },
+            {
+              id: 'passage',
+              name: 'Passage & WM Utility',
+              shortLabel: 'PASSAGE\n1.00×1.30',
+              dimsText: '1.00m × 1.30m',
+              areaSqm: 1.30,
+              bounds: { x1: 3.30, z1: 1.50, x2: 4.20, z2: 3.00 },
+              floorType: 'ceramic_grey',
+              floorLabel: 'Anti-Skid Grey Ceramic Tile',
+              color2d: 'rgba(148, 163, 184, 0.20)',
+              stroke2d: '#94a3b8',
+              joineryCodes: ['O', 'D1'],
+              furnitureList: 'Front-Load Washing Machine (WM) in dedicated utility corner',
+              desc: 'Circulation and utility passage linking the Kitchen (via Opening O) to the W.C. (via Door D1), with a plumbed niche for the Washing Machine (WM) in the southeast corner.',
+              spawn: { x: 3.70, z: 2.20, yaw: 0 }
+            },
+            {
+              id: 'wc',
+              name: 'W.C. (Water Closet)',
+              shortLabel: 'W.C.\n0.90×1.20',
+              dimsText: '0.90m × 1.20m',
+              areaSqm: 1.08,
+              bounds: { x1: 3.30, z1: 0.20, x2: 4.20, z2: 1.40 },
+              floorType: 'ceramic_aqua',
+              floorLabel: 'Anti-Skid Wet-Area Tile',
+              color2d: 'rgba(20, 184, 166, 0.20)',
+              stroke2d: '#2dd4bf',
+              joineryCodes: ['D1', 'V'],
+              furnitureList: 'Floor-Mounted Ceramic WC Pan, Flush Cistern, Health Faucet Tap',
+              desc: 'Dedicated 0.90m × 1.20m water closet entered from the Passage via a 0.75m Door (D1) and ventilated into the adjacent Open-to-Sky (OTS) shaft via a 0.60×0.60m Louvered Ventilator (V).',
+              spawn: { x: 3.75, z: 0.90, yaw: 3.14 }
+            },
+            {
+              id: 'bath',
+              name: 'Bathroom',
+              shortLabel: 'BATH\n1.00×1.40',
+              dimsText: '1.00m × 1.40m',
+              areaSqm: 1.40,
+              bounds: { x1: 4.30, z1: 1.60, x2: 5.30, z2: 3.00 },
+              floorType: 'ceramic_aqua',
+              floorLabel: 'Anti-Skid Ceramic Bath Tile',
+              color2d: 'rgba(6, 182, 212, 0.20)',
+              stroke2d: '#22d3ee',
+              joineryCodes: ['D1', 'V'],
+              furnitureList: 'Wall-Hung Washbasin & Mirror on West Wall, Overhead Shower Rose & Mixer Tap, Towel Rail',
+              desc: '1.00m × 1.40m bathroom accessed directly from the Bedroom via a 0.75m Door (D1), equipped with a wall-mounted washbasin, shower fittings, and a 0.60×0.60m Ventilator (V) facing the OTS shaft.',
+              spawn: { x: 4.80, z: 2.35, yaw: 0 }
+            },
+            {
+              id: 'balcony',
+              name: 'Balcony',
+              shortLabel: 'BALCONY\n1.00×1.40',
+              dimsText: '1.00m × 1.40m',
+              areaSqm: 1.40,
+              bounds: { x1: 5.40, z1: 1.60, x2: 6.40, z2: 3.00 },
+              floorType: 'stone_slate',
+              floorLabel: 'Textured Outdoor Slate Tile',
+              color2d: 'rgba(16, 185, 129, 0.20)',
+              stroke2d: '#34d399',
+              joineryCodes: ['BD', 'OGW'],
+              furnitureList: 'Openable Security Grill Window (OGW 0.90×0.90m), Potted Balcony Planter, Utility Drying Line',
+              desc: 'Semi-open utility and ventilation balcony entered from the Bedroom via Balcony Door (BD 0.90×2.10m) and secured on the north face by an Openable Grill Window (OGW 0.90×0.90m).',
+              spawn: { x: 5.90, z: 2.35, yaw: 0 }
+            },
+            {
+              id: 'ots',
+              name: 'O.T.S. (Open-to-Sky Shaft)',
+              shortLabel: 'O.T.S.\n1.00×1.30',
+              dimsText: '1.00m × 1.30m',
+              areaSqm: 1.30,
+              bounds: { x1: 4.30, z1: 0.20, x2: 5.30, z2: 1.50 },
+              floorType: 'concrete_shaft',
+              floorLabel: 'Sunken Concrete Service Shaft',
+              color2d: 'rgba(71, 85, 105, 0.30)',
+              stroke2d: '#64748b',
+              joineryCodes: ['V'],
+              furnitureList: 'Vertical Plumbing Stacks & Cross-Ventilation Core (Open to Sky)',
+              desc: '1.00m × 1.30m vertical ventilation and plumbing core providing daylight and air extraction for both the W.C. and Bathroom ventilators (V).',
+              spawn: { x: 4.80, z: 0.85, yaw: 0 }
+            }
+          ],
+          // Wall segments: { x1, z1, x2, z2, type: 'ext'|'int', openings: [ { code, pos (0..1 along wall or offset from start), w, h, sill, swingDir, hingeSide } ] }
+          walls: [
+            // Front (South) Exterior Wall (Z = 5.60 to 5.80, X = 0.00 to 6.60)
+            { x1: 0.00, z1: 5.60, x2: 6.60, z2: 5.80, axis: 'x', type: 'ext', openings: [
+              { code: 'SW/NV', offset: 0.70, w: 1.15, h: 1.55, sill: 0.85 },
+              { code: 'MD',    offset: 2.10, w: 1.00, h: 2.10, sill: 0.00, hinge: 'right', swing: -1 },
+              { code: 'SW/NV', offset: 3.90, w: 1.15, h: 1.55, sill: 0.85 }
+            ]},
+            // Left (West) Exterior Wall of Hall (X = 0.00 to 0.20, Z = 2.90 to 5.60)
+            { x1: 0.00, z1: 2.90, x2: 0.20, z2: 5.60, axis: 'z', type: 'ext', openings: [] },
+            // Step-in North Wall of Hall West Bay (Z = 2.90 to 3.10, X = 0.20 to 1.40)
+            { x1: 0.20, z1: 2.90, x2: 1.40, z2: 3.10, axis: 'x', type: 'ext', openings: [
+              { code: 'W', offset: 0.15, w: 0.90, h: 1.35, sill: 0.75 }
+            ]},
+            // Left (West) Exterior Wall of Kitchen (X = 1.20 to 1.40, Z = 0.00 to 2.90)
+            { x1: 1.20, z1: 0.00, x2: 1.40, z2: 2.90, axis: 'z', type: 'ext', openings: [
+              { code: 'V1', offset: 0.70, w: 1.70, h: 0.60, sill: 1.95 }
+            ]},
+            // Rear (North) Exterior Wall of Kitchen, WC & OTS (Z = 0.00 to 0.20, X = 1.40 to 5.40)
+            { x1: 1.40, z1: 0.00, x2: 5.40, z2: 0.20, axis: 'x', type: 'ext', openings: [
+              { code: 'KW', offset: 0.40, w: 1.00, h: 1.05, sill: 1.05 }
+            ]},
+            // East Wall of OTS Shaft (X = 5.30 to 5.40, Z = 0.20 to 1.50)
+            { x1: 5.30, z1: 0.20, x2: 5.40, z2: 1.50, axis: 'z', type: 'ext', openings: [] },
+            // North Wall of Balcony with OGW (Z = 1.50 to 1.60, X = 5.40 to 6.60)
+            { x1: 5.40, z1: 1.50, x2: 6.60, z2: 1.60, axis: 'x', type: 'ext', openings: [
+              { code: 'OGW', offset: 0.05, w: 0.90, h: 0.90, sill: 1.05 }
+            ]},
+            // Right (East) Exterior Wall of Balcony & Bedroom (X = 6.40 to 6.60, Z = 1.60 to 5.60)
+            { x1: 6.40, z1: 1.60, x2: 6.60, z2: 5.60, axis: 'z', type: 'ext', openings: [] },
+
+            // INTERIOR PARTITIONS
+            // Hall - Kitchen Cased Opening Wall (Z = 2.95 to 3.10, X = 1.40 to 3.20)
+            { x1: 1.40, z1: 2.95, x2: 3.20, z2: 3.10, axis: 'x', type: 'int', openings: [
+              { code: 'O1', offset: 0.05, w: 1.70, h: 2.10, sill: 0.00 }
+            ]},
+            // Hall - Bedroom Partition Wall (X = 3.20 to 3.30, Z = 3.10 to 5.60)
+            { x1: 3.20, z1: 3.10, x2: 3.30, z2: 5.60, axis: 'z', type: 'int', openings: [
+              { code: 'D', offset: 0.12, w: 0.90, h: 2.10, sill: 0.00, hinge: 'left', swing: 1 }
+            ]},
+            // Kitchen - Passage/WC Partition Wall (X = 3.20 to 3.30, Z = 0.20 to 3.10)
+            { x1: 3.20, z1: 0.20, x2: 3.30, z2: 3.10, axis: 'z', type: 'int', openings: [
+              { code: 'O', offset: 1.40, w: 1.30, h: 2.10, sill: 0.00 }
+            ]},
+            // WC - Passage Partition Wall (Z = 1.40 to 1.50, X = 3.30 to 4.20)
+            { x1: 3.30, z1: 1.40, x2: 4.20, z2: 1.50, axis: 'x', type: 'int', openings: [
+              { code: 'D1', offset: 0.08, w: 0.75, h: 2.10, sill: 0.00, hinge: 'left', swing: -1 }
+            ]},
+            // WC/Passage - OTS/Bath Wall (X = 4.20 to 4.30, Z = 0.20 to 3.00)
+            { x1: 4.20, z1: 0.20, x2: 4.30, z2: 3.00, axis: 'z', type: 'int', openings: [
+              { code: 'V', offset: 0.35, w: 0.60, h: 0.60, sill: 1.95 }
+            ]},
+            // OTS - Bath Wall (Z = 1.50 to 1.60, X = 4.30 to 5.30)
+            { x1: 4.30, z1: 1.50, x2: 5.30, z2: 1.60, axis: 'x', type: 'int', openings: [
+              { code: 'V', offset: 0.20, w: 0.60, h: 0.60, sill: 1.95 }
+            ]},
+            // Bath - Balcony Partition Wall (X = 5.30 to 5.40, Z = 1.50 to 3.00)
+            { x1: 5.30, z1: 1.50, x2: 5.40, z2: 3.00, axis: 'z', type: 'int', openings: [] },
+            // Passage/Bath/Balcony - Bedroom Wall (Z = 3.00 to 3.10, X = 3.30 to 6.40)
+            { x1: 3.30, z1: 3.00, x2: 6.40, z2: 3.10, axis: 'x', type: 'int', openings: [
+              { code: 'D1', offset: 1.10, w: 0.75, h: 2.10, sill: 0.00, hinge: 'left', swing: -1 },
+              { code: 'BD', offset: 2.15, w: 0.90, h: 2.10, sill: 0.00, hinge: 'right', swing: -1 }
+            ]}
+          ]
+        },
+
+        // =====================================================================
+        // UNIT 2: PwD ACCESSIBLE UNIT (28.08 sq.m)
+        // =====================================================================
+        pwd: {
+          id: 'pwd',
+          name: 'PwD Accessible Unit',
+          carpetArea: '28.08 sq.m',
+          envelope: { width: 6.60, depth: 5.80 },
+          rooms: [
+            {
+              id: 'hall',
+              name: 'Hall (Accessible Living)',
+              shortLabel: 'HALL\n3.00×2.50',
+              dimsText: '3.00m × 2.50m',
+              areaSqm: 7.50,
+              bounds: { x1: 0.20, z1: 3.10, x2: 3.20, z2: 5.60 },
+              floorType: 'vitrified_ivory',
+              floorLabel: 'Zero-Threshold Matte Vitrified Tile',
+              color2d: 'rgba(56, 189, 248, 0.18)',
+              stroke2d: '#38bdf8',
+              joineryCodes: ['UD', 'SW/NV', 'W', 'O1', 'SD'],
+              furnitureList: '2 Accessible Lounge Chairs, Low Coffee Table, Wall TV Unit, Barrier-Free Circulation Path',
+              desc: 'Barrier-free living hall entered via a 1.00m Universal Door (UD) with bevelled threshold. Connects to the Bedroom through a wide 2.50m Sliding Door (SD) and to the Kitchen via the 1.80m clear opening (O1).',
+              spawn: { x: 2.60, z: 4.55, yaw: 0 }
+            },
+            {
+              id: 'bedroom',
+              name: 'Accessible Bedroom',
+              shortLabel: 'BEDROOM\n3.10×2.50',
+              dimsText: '3.10m × 2.50m',
+              areaSqm: 7.75,
+              bounds: { x1: 3.30, z1: 3.10, x2: 6.40, z2: 5.60 },
+              floorType: 'vitrified_warm',
+              floorLabel: 'Slip-Resistant Warm Vitrified Tile',
+              color2d: 'rgba(168, 85, 247, 0.18)',
+              stroke2d: '#c084fc',
+              joineryCodes: ['SD', 'SW/NV', 'SD1', 'UD'],
+              furnitureList: 'Accessible Height Double Bed (1.60×2.00m), Sliding-Door Wardrobe, Clear Transfer Zone',
+              desc: '3.10m × 2.50m bedroom featuring a full-width 2.50m Sliding Door (SD) from the Hall, a 1.00m Sliding Door (SD1) directly into the Accessible Bath/WC, and a 1.00m Universal Door (UD) to the Balcony.',
+              spawn: { x: 4.18, z: 3.62, yaw: 3.14 }
+            },
+            {
+              id: 'kitchen',
+              name: 'Accessible Kitchen',
+              shortLabel: 'KITCHEN\n1.80×2.50',
+              dimsText: '1.80m × 2.50m',
+              areaSqm: 4.86,
+              bounds: { x1: 1.40, z1: 0.20, x2: 3.20, z2: 2.90 },
+              floorType: 'terracotta_tile',
+              floorLabel: 'Anti-Skid Matte Kitchen Tile',
+              color2d: 'rgba(245, 158, 11, 0.18)',
+              stroke2d: '#fbbf24',
+              joineryCodes: ['O1', 'KW', 'V1', 'UD'],
+              furnitureList: 'L-Shaped Countertop with Knee-Clearance Zone, Sink, 2-Burner Hob, Fridge, Overhead Loft',
+              desc: '1.80m × 2.50m kitchen with rear Kitchen Window (KW), side N-Type Ventilator (V1), and a 1.00m Universal Door (UD) connecting directly to the Accessible Bathroom.',
+              spawn: { x: 2.45, z: 1.85, yaw: 1.57 }
+            },
+            {
+              id: 'pwd_bath',
+              name: 'Accessible Bath & W.C. (PwD)',
+              shortLabel: 'PwD BATH & WC\n2.00×2.70',
+              dimsText: '2.00m × 2.70m',
+              areaSqm: 4.85,
+              bounds: { x1: 3.30, z1: 0.20, x2: 5.30, z2: 3.00 },
+              floorType: 'ceramic_aqua',
+              floorLabel: 'High-Grip Tactile Anti-Skid Tile',
+              color2d: 'rgba(16, 185, 129, 0.22)',
+              stroke2d: '#10b981',
+              joineryCodes: ['SD1', 'UD', 'V'],
+              furnitureList: '1.50m Wheelchair Turning Circle, Western WC with Fold-Down Grab Bars, Roll-Under Washbasin, Level-Access Shower Seat',
+              desc: 'Barrier-free combined bathroom and toilet (2.00m wide) featuring an unobstructed 1.50m wheelchair turning circle (shown in CAD plan), dual accessible entrances (SD1 from Bedroom and UD from Kitchen), western commode with grab rails, roll-under basin, and level shower.',
+              spawn: { x: 4.15, z: 2.05, yaw: 0 }
+            },
+            {
+              id: 'balcony',
+              name: 'Balcony & WM Utility',
+              shortLabel: 'BALCONY\n1.00×1.40',
+              dimsText: '1.00m × 1.40m',
+              areaSqm: 1.40,
+              bounds: { x1: 5.40, z1: 1.60, x2: 6.40, z2: 3.00 },
+              floorType: 'stone_slate',
+              floorLabel: 'Non-Slip Outdoor Slate Tile',
+              color2d: 'rgba(6, 182, 212, 0.20)',
+              stroke2d: '#22d3ee',
+              joineryCodes: ['UD', 'OGW'],
+              furnitureList: 'Washing Machine (WM) Utility Alcove, Openable Grill Window (OGW 0.90×0.90m)',
+              desc: '1.00m × 1.40m utility balcony accessed from the Bedroom via a 1.00m Universal Door (UD), housing the Washing Machine (WM) and rear Openable Grill Window (OGW).',
+              spawn: { x: 5.90, z: 2.35, yaw: 0 }
+            },
+            {
+              id: 'duct',
+              name: 'Ventilation Service Duct',
+              shortLabel: 'DUCT\n0.60×1.20',
+              dimsText: '0.60m × 1.20m',
+              areaSqm: 0.72,
+              bounds: { x1: 4.70, z1: 0.20, x2: 5.30, z2: 1.40 },
+              floorType: 'concrete_shaft',
+              floorLabel: 'Sunken Service Duct',
+              color2d: 'rgba(71, 85, 105, 0.35)',
+              stroke2d: '#64748b',
+              joineryCodes: ['V'],
+              furnitureList: 'Plumbing & Exhaust Shaft with Ventilator (V)',
+              desc: '0.60m × 1.20m vertical plumbing and ventilation duct tucked in the northeast corner of the PwD Bathroom.',
+              spawn: { x: 5.00, z: 0.80, yaw: 0 }
+            }
+          ],
+          walls: [
+            // Front (South) Exterior Wall (Z = 5.60 to 5.80, X = 0.00 to 6.60)
+            { x1: 0.00, z1: 5.60, x2: 6.60, z2: 5.80, axis: 'x', type: 'ext', openings: [
+              { code: 'SW/NV', offset: 0.70, w: 1.15, h: 1.55, sill: 0.85 },
+              { code: 'UD',    offset: 2.10, w: 1.00, h: 2.10, sill: 0.00, hinge: 'right', swing: -1 },
+              { code: 'SW/NV', offset: 3.90, w: 1.15, h: 1.55, sill: 0.85 }
+            ]},
+            // Left (West) Exterior Wall of Hall
+            { x1: 0.00, z1: 2.90, x2: 0.20, z2: 5.60, axis: 'z', type: 'ext', openings: [] },
+            // Step-in North Wall of Hall West Bay
+            { x1: 0.20, z1: 2.90, x2: 1.40, z2: 3.10, axis: 'x', type: 'ext', openings: [
+              { code: 'W', offset: 0.15, w: 0.90, h: 1.35, sill: 0.75 }
+            ]},
+            // Left (West) Exterior Wall of Kitchen
+            { x1: 1.20, z1: 0.00, x2: 1.40, z2: 2.90, axis: 'z', type: 'ext', openings: [
+              { code: 'V1', offset: 0.70, w: 1.70, h: 0.60, sill: 1.95 }
+            ]},
+            // Rear (North) Exterior Wall of Kitchen & PwD Bath
+            { x1: 1.40, z1: 0.00, x2: 5.40, z2: 0.20, axis: 'x', type: 'ext', openings: [
+              { code: 'KW', offset: 0.40, w: 1.00, h: 1.05, sill: 1.05 }
+            ]},
+            // East Exterior Wall of PwD Bath / Duct (X = 5.30 to 5.40, Z = 0.20 to 1.50)
+            { x1: 5.30, z1: 0.20, x2: 5.40, z2: 1.50, axis: 'z', type: 'ext', openings: [
+              { code: 'V', offset: 0.30, w: 0.60, h: 0.60, sill: 1.95 }
+            ]},
+            // North Wall of Balcony with OGW
+            { x1: 5.40, z1: 1.50, x2: 6.60, z2: 1.60, axis: 'x', type: 'ext', openings: [
+              { code: 'OGW', offset: 0.05, w: 0.90, h: 0.90, sill: 1.05 }
+            ]},
+            // Right (East) Exterior Wall of Balcony & Bedroom
+            { x1: 6.40, z1: 1.60, x2: 6.60, z2: 5.60, axis: 'z', type: 'ext', openings: [] },
+
+            // INTERIOR PARTITIONS
+            // Hall - Kitchen Opening Wall
+            { x1: 1.40, z1: 2.95, x2: 3.20, z2: 3.10, axis: 'x', type: 'int', openings: [
+              { code: 'O1', offset: 0.05, w: 1.70, h: 2.10, sill: 0.00 }
+            ]},
+            // Hall - Bedroom Partition with 2.50m Sliding Door SD
+            { x1: 3.20, z1: 3.10, x2: 3.30, z2: 5.60, axis: 'z', type: 'int', openings: [
+              { code: 'SD', offset: 0.15, w: 2.20, h: 2.10, sill: 0.00 }
+            ]},
+            // Kitchen - PwD Bath Wall with Universal Door UD
+            { x1: 3.20, z1: 0.20, x2: 3.30, z2: 3.10, axis: 'z', type: 'int', openings: [
+              { code: 'UD', offset: 1.45, w: 1.00, h: 2.10, sill: 0.00, hinge: 'left', swing: 1 }
+            ]},
+            // Service Duct Inner Walls (X = 4.65..4.75, Z = 0.20..1.40 and Z = 1.35..1.45, X = 4.65..5.30)
+            { x1: 4.65, z1: 0.20, x2: 4.75, z2: 1.40, axis: 'z', type: 'int', openings: [] },
+            { x1: 4.65, z1: 1.35, x2: 5.30, z2: 1.45, axis: 'x', type: 'int', openings: [
+              { code: 'V', offset: 0.05, w: 0.50, h: 0.60, sill: 1.95 }
+            ]},
+            // PwD Bath - Balcony Wall
+            { x1: 5.30, z1: 1.50, x2: 5.40, z2: 3.00, axis: 'z', type: 'int', openings: [] },
+            // PwD Bath & Balcony - Bedroom Wall (with SD1 Sliding Door & UD Balcony Door)
+            { x1: 3.30, z1: 3.00, x2: 6.40, z2: 3.10, axis: 'x', type: 'int', openings: [
+              { code: 'SD1', offset: 0.85, w: 1.00, h: 2.10, sill: 0.00 },
+              { code: 'UD',  offset: 2.10, w: 0.95, h: 2.10, sill: 0.00, hinge: 'right', swing: -1 }
+            ]}
+          ]
+        }
+      };
+
+      // =========================================================================
+      // 2. APPLICATION STATE
+      // =========================================================================
+      const state = {
+        activeUnit: 'general',      // 'general' | 'pwd' | 'both'
+        viewMode: 'orbit',          // 'orbit' | 'walk' | 'plan2d' | 'split'
+        wallMode: 'full',           // 'full' | 'cutaway' | 'xray' | 'none'
+        wallHeight: 2.90,
+        doorsOpen: false,
+        doorAnimProgress: 0,        // 0 (closed) -> 1 (open)
+        selectedRoomId: null,
+        selectedRoomUnit: 'general',
+        hoveredRoomId: null,
+        markingsVisible: true,
+        visibility: {
+          extWalls: true,
+          intWalls: true,
+          doors: true,
+          joinery: true,
+          furniture: true,
+          lofts: true,
+          ceiling: false,
+          roomLabels: true,
+          joineryLabels: true,
+          dimensions: true,
+          floorMarkings: true
+        },
+        lightingPreset: 'day',
+        sunAngleDeg: 135,
+        // First-Person state
+        fp: {
+          pos: new THREE.Vector3(2.60, 1.62, 4.55),
+          yaw: 0,
+          pitch: -0.05,
+          eyeHeight: 1.62,
+          speed: 2.8,
+          collision: true,
+          keys: { forward: false, backward: false, left: false, right: false, turnLeft: false, turnRight: false },
+          walkTarget: null,
+          isDraggingLook: false,
+          lastMouseX: 0,
+          lastMouseY: 0
+        },
+        // 2D Canvas pan/zoom state
+        plan2d: {
+          zoom: 1.0,
+          panX: 0,
+          panY: 0,
+          isDragging: false,
+          lastX: 0,
+          lastY: 0,
+          showCadOverlay: false
+        }
+      };
+
+      // =========================================================================
+      // 3. PROCEDURAL PBR TEXTURE & MATERIAL GENERATOR
+      // =========================================================================
+      const textures = {};
+      const materials = {};
+
+      function createProceduralTileTexture(bgHex, groutHex, accentHex, gridCount, noiseAmt) {
+        const c = document.createElement('canvas');
+        c.width = 256; c.height = 256;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = bgHex;
+        ctx.fillRect(0, 0, 256, 256);
+
+        // Subtle stone/ceramic grain
+        for (let i = 0; i < 1200; i++) {
+          ctx.fillStyle = (i % 2 === 0) ? accentHex : 'rgba(255,255,255,0.04)';
+          ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+        }
+
+        // Grout lines
+        ctx.strokeStyle = groutHex;
+        ctx.lineWidth = 2;
+        const step = 256 / gridCount;
+        for (let i = 0; i <= gridCount; i++) {
+          const p = Math.round(i * step);
+          ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, 256); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(256, p); ctx.stroke();
+        }
+
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(3, 3);
+        return tex;
+      }
+
+      function createWoodTexture(baseHex, grainHex) {
+        const c = document.createElement('canvas');
+        c.width = 256; c.height = 256;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = baseHex;
+        ctx.fillRect(0, 0, 256, 256);
+        ctx.fillStyle = grainHex;
+        for (let i = 0; i < 90; i++) {
+          const x = Math.random() * 256;
+          const h = 40 + Math.random() * 180;
+          ctx.fillRect(x, Math.random() * 256, 1.5, h);
+        }
+        return new THREE.CanvasTexture(c);
+      }
+
+      function initMaterials() {
+        textures.vitrified_ivory = createProceduralTileTexture('#ece8df', '#ccc5b9', 'rgba(180,170,155,0.08)', 4);
+        textures.vitrified_warm  = createProceduralTileTexture('#e3d5c5', '#c2b29f', 'rgba(160,130,100,0.09)', 4);
+        textures.terracotta_tile = createProceduralTileTexture('#d9c3b0', '#b59d88', 'rgba(194,120,80,0.10)', 6);
+        textures.ceramic_grey    = createProceduralTileTexture('#cbd5e1', '#94a3b8', 'rgba(71,85,105,0.10)', 6);
+        textures.ceramic_aqua    = createProceduralTileTexture('#cffafe', '#67e8f9', 'rgba(14,165,233,0.12)', 8);
+        textures.stone_slate     = createProceduralTileTexture('#94a3b8', '#64748b', 'rgba(30,41,59,0.15)', 6);
+        textures.concrete_shaft  = createProceduralTileTexture('#64748b', '#475569', 'rgba(15,23,42,0.18)', 4);
+        textures.teakWood        = createWoodTexture('#78350f', 'rgba(45,18,4,0.28)');
+        textures.walnutWood      = createWoodTexture('#5c3a21', 'rgba(30,15,5,0.25)');
+        textures.oakWood         = createWoodTexture('#b48a60', 'rgba(90,60,30,0.20)');
+
+        materials.floorTypes = {
+          vitrified_ivory: new THREE.MeshStandardMaterial({ map: textures.vitrified_ivory, roughness: 0.25, metalness: 0.05 }),
+          vitrified_warm:  new THREE.MeshStandardMaterial({ map: textures.vitrified_warm,  roughness: 0.28, metalness: 0.05 }),
+          terracotta_tile: new THREE.MeshStandardMaterial({ map: textures.terracotta_tile, roughness: 0.45, metalness: 0.04 }),
+          ceramic_grey:    new THREE.MeshStandardMaterial({ map: textures.ceramic_grey,    roughness: 0.50, metalness: 0.05 }),
+          ceramic_aqua:    new THREE.MeshStandardMaterial({ map: textures.ceramic_aqua,    roughness: 0.42, metalness: 0.06 }),
+          stone_slate:     new THREE.MeshStandardMaterial({ map: textures.stone_slate,     roughness: 0.65, metalness: 0.05 }),
+          concrete_shaft:  new THREE.MeshStandardMaterial({ map: textures.concrete_shaft,  roughness: 0.85, metalness: 0.02 })
+        };
+
+        materials.extWall = new THREE.MeshStandardMaterial({
+          color: 0xf4f1ea, roughness: 0.72, metalness: 0.02
+        });
+        materials.intWall = new THREE.MeshStandardMaterial({
+          color: 0xfaf8f5, roughness: 0.65, metalness: 0.02
+        });
+        materials.wallTopCap = new THREE.MeshStandardMaterial({
+          color: 0x334155, roughness: 0.60, metalness: 0.10
+        });
+        materials.skirting = new THREE.MeshStandardMaterial({
+          color: 0xd6d3cd, roughness: 0.4, metalness: 0.05
+        });
+        materials.slabBase = new THREE.MeshStandardMaterial({
+          color: 0x1e293b, roughness: 0.85, metalness: 0.05
+        });
+        materials.ceiling = new THREE.MeshStandardMaterial({
+          color: 0xffffff, roughness: 0.7, side: THREE.DoubleSide, transparent: true, opacity: 0.88
+        });
+        materials.loft = new THREE.MeshStandardMaterial({
+          color: 0xe2e8f0, roughness: 0.6, metalness: 0.05
+        });
+
+        // Joinery & Furniture materials
+        materials.teak = new THREE.MeshStandardMaterial({ map: textures.teakWood, roughness: 0.38, metalness: 0.08 });
+        materials.walnut = new THREE.MeshStandardMaterial({ map: textures.walnutWood, roughness: 0.42, metalness: 0.06 });
+        materials.oak = new THREE.MeshStandardMaterial({ map: textures.oakWood, roughness: 0.45, metalness: 0.05 });
+        materials.pwdDoor = new THREE.MeshStandardMaterial({ color: 0x0f766e, roughness: 0.35, metalness: 0.15 });
+        materials.bathDoor = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.38, metalness: 0.18 });
+        materials.windowFrame = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.3, metalness: 0.6 });
+        materials.glass = new THREE.MeshPhysicalMaterial({
+          color: 0xbae6fd, transparent: true, opacity: 0.38, roughness: 0.08, metalness: 0.1, side: THREE.DoubleSide
+        });
+        materials.granite = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.18, metalness: 0.25 });
+        materials.steel = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.22, metalness: 0.85 });
+        materials.ceramicWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15, metalness: 0.08 });
+        materials.sofaFabric = new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.80, metalness: 0.02 });
+        materials.bedFabric = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.78, metalness: 0.02 });
+        materials.blanketTeal = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.75, metalness: 0.02 });
+        materials.blanketEmerald = new THREE.MeshStandardMaterial({ color: 0x059669, roughness: 0.75, metalness: 0.02 });
+        materials.applianceSilver = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.30, metalness: 0.65 });
+      }
+
+      // =========================================================================
+      // 4. THREE.JS SCENE, CAMERA, LIGHTS & BUILDER
+      // =========================================================================
+      const canvas3d = document.getElementById('three-canvas');
+      const webglPane = document.getElementById('webgl-pane');
+      const labelsContainer = document.getElementById('labels-3d-container');
+
+      const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, powerPreference: 'high-performance' });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.10;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0b0f17);
+
+      const camera = new THREE.PerspectiveCamera(48, 1, 0.08, 120);
+      camera.position.set(3.30, 8.80, 11.20);
+
+      const orbitControls = new THREE.OrbitControls(camera, canvas3d);
+      orbitControls.target.set(3.30, 0.80, 2.90);
+      orbitControls.enableDamping = true;
+      orbitControls.dampingFactor = 0.07;
+      orbitControls.maxPolarAngle = Math.PI / 2 - 0.02; // Prevent camera from going underground
+      orbitControls.minDistance = 1.5;
+      orbitControls.maxDistance = 32;
+
+      // Ground architectural grid & context podium
+      const envGroup = new THREE.Group();
+      scene.add(envGroup);
+
+      const gridHelper = new THREE.GridHelper(32, 32, 0x1e293b, 0x111827);
+      gridHelper.position.set(3.3, -0.16, 2.9);
+      envGroup.add(gridHelper);
+
+      // Lighting setup
+      const hemiLight = new THREE.HemisphereLight(0xe0f2fe, 0x1e293b, 0.68);
+      hemiLight.position.set(0, 15, 0);
+      scene.add(hemiLight);
+
+      const sunLight = new THREE.DirectionalLight(0xfffbeb, 1.15);
+      sunLight.position.set(8, 14, 9);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.width = 2048;
+      sunLight.shadow.mapSize.height = 2048;
+      sunLight.shadow.camera.near = 1;
+      sunLight.shadow.camera.far = 38;
+      const d = 12;
+      sunLight.shadow.camera.left = -d;
+      sunLight.shadow.camera.right = d;
+      sunLight.shadow.camera.top = d;
+      sunLight.shadow.camera.bottom = -d;
+      sunLight.shadow.bias = -0.0005;
+      scene.add(sunLight);
+
+      const roomLightsGroup = new THREE.Group();
+      scene.add(roomLightsGroup);
+
+      // Scene root groups
+      const modelRoot = new THREE.Group();
+      scene.add(modelRoot);
+
+      // Tracked interactive meshes & animated pivots
+      let roomFloorMeshes = [];
+      let doorPivots = [];       // { group, kind: 'hinge'|'slide', closedRot/Pos, openRot/Pos, colliderBox }
+      let wallColliders = [];    // Array of { x1, z1, x2, z2, isDoor }
+      let labelAnchors = [];     // Array of { el, pos3d, kind: 'room'|'joinery', roomId, unitId }
+      let layerGroups = {
+        extWalls: new THREE.Group(),
+        intWalls: new THREE.Group(),
+        doors: new THREE.Group(),
+        joinery: new THREE.Group(),
+        furniture: new THREE.Group(),
+        lofts: new THREE.Group(),
+        ceiling: new THREE.Group(),
+        dimensions: new THREE.Group(),
+        floorMarkings: new THREE.Group()
+      };
+      Object.values(layerGroups).forEach(g => modelRoot.add(g));
+
+      // Helper to create shadowed box mesh
+      function makeBox(w, h, d, mat, x, y, z, castShadow = true, receiveShadow = true) {
+        const geom = new THREE.BoxGeometry(w, h, d);
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.set(x, y, z);
+        mesh.castShadow = castShadow;
+        mesh.receiveShadow = receiveShadow;
+        return mesh;
+      }
+
+      // Build a single wall segment with accurate cutouts for doors, windows, and ventilators
+      function buildWallWithOpenings(wall, offsetX, unitId) {
+        const H = getEffectiveWallHeight();
+        const isExt = wall.type === 'ext';
+        const targetGroup = isExt ? layerGroups.extWalls : layerGroups.intWalls;
+        const wallMat = isExt ? materials.extWall : materials.intWall;
+
+        const length = (wall.axis === 'x') ? (wall.x2 - wall.x1) : (wall.z2 - wall.z1);
+        const thickness = (wall.axis === 'x') ? (wall.z2 - wall.z1) : (wall.x2 - wall.x1);
+
+        // Sort openings by offset along wall
+        const ops = (wall.openings || []).slice().sort((a, b) => a.offset - b.offset);
+        let cursor = 0;
+
+        const addSolidSpan = (s0, s1, y0, y1, registerCollider = true) => {
+          const spanLen = s1 - s0;
+          const spanHt = y1 - y0;
+          if (spanLen <= 0.005 || spanHt <= 0.005) return;
+
+          let cx, cz, bw, bd;
+          if (wall.axis === 'x') {
+            bw = spanLen;
+            bd = thickness;
+            cx = offsetX + wall.x1 + s0 + spanLen / 2;
+            cz = (wall.z1 + wall.z2) / 2;
+          } else {
+            bw = thickness;
+            bd = spanLen;
+            cx = offsetX + (wall.x1 + wall.x2) / 2;
+            cz = wall.z1 + s0 + spanLen / 2;
+          }
+          const cy = y0 + spanHt / 2;
+          const mesh = makeBox(bw, spanHt, bd, wallMat, cx, cy, cz);
+          targetGroup.add(mesh);
+
+          // Dark architectural top cap when in full/cutaway mode
+          const cap = makeBox(bw + 0.004, 0.025, bd + 0.004, materials.wallTopCap, cx, y1 + 0.012, cz, false, false);
+          targetGroup.add(cap);
+
+          // Baseboard skirting at floor level
+          if (y0 === 0) {
+            const sk = makeBox(bw + 0.012, 0.08, bd + 0.012, materials.skirting, cx, 0.04, cz, false, true);
+            targetGroup.add(sk);
+          }
+
+          if (registerCollider && y0 < 1.5) {
+            wallColliders.push({
+              x1: cx - bw / 2,
+              z1: cz - bd / 2,
+              x2: cx + bw / 2,
+              z2: cz + bd / 2,
+              isDoor: false
+            });
+          }
+        };
+
+        ops.forEach(op => {
+          const oStart = Math.max(cursor, op.offset);
+          const oEnd = Math.min(length, op.offset + op.w);
+          // Full-height wall before opening
+          if (oStart > cursor) {
+            addSolidSpan(cursor, oStart, 0, H, true);
+          }
+
+          // Sill below window/ventilator
+          const sillTop = Math.min(op.sill, H);
+          if (sillTop > 0.01) {
+            addSolidSpan(oStart, oEnd, 0, sillTop, true);
+          }
+
+          // Lintel above door/window/opening
+          const lintelBot = op.sill + op.h;
+          if (H > lintelBot + 0.01) {
+            addSolidSpan(oStart, oEnd, lintelBot, H, false);
+          }
+
+          // Build the joinery geometry (door, sliding door, window, ventilator, archway)
+          buildJoineryItem(wall, op, oStart, oEnd, thickness, offsetX, unitId);
+
+          cursor = oEnd;
+        });
+
+        // Remaining solid wall after last opening
+        if (cursor < length - 0.005) {
+          addSolidSpan(cursor, length, 0, H, true);
+        }
+      }
+
+      function buildJoineryItem(wall, op, oStart, oEnd, thickness, offsetX, unitId) {
+        const spec = JOINERY_SPECS[op.code] || { kind: 'opening', name: op.code };
+        const H = getEffectiveWallHeight();
+        const opW = oEnd - oStart;
+        const opH = Math.min(op.h, Math.max(0.2, H - op.sill));
+        if (opH <= 0.05) return;
+
+        let cx, cz;
+        if (wall.axis === 'x') {
+          cx = offsetX + wall.x1 + (oStart + oEnd) / 2;
+          cz = (wall.z1 + wall.z2) / 2;
+        } else {
+          cx = offsetX + (wall.x1 + wall.x2) / 2;
+          cz = wall.z1 + (oStart + oEnd) / 2;
+        }
+        const cy = op.sill + opH / 2;
+
+        const isDoorJoinery = (spec.kind === 'door' || spec.kind === 'sliding');
+
+        // Register floating 3D Joinery Code Badge
+        labelAnchors.push({
+          kind: 'joinery',
+          isDoor: isDoorJoinery,
+          code: op.code,
+          title: `${op.code}: ${spec.name} (${spec.w.toFixed(2)}×${spec.h.toFixed(2)}m)`,
+          pos3d: new THREE.Vector3(cx, Math.min(op.sill + op.h + 0.15, H + 0.18), cz),
+          unitId
+        });
+
+        const frameDepth = thickness + 0.03;
+        const frameThick = 0.045;
+
+        if (spec.kind === 'door') {
+          // Outer wooden/metal door frame jambs (placed in layerGroups.doors so doors can be removed independently)
+          const frameMat = (op.code === 'UD') ? materials.pwdDoor : (op.code === 'D1' || op.code === 'BD' ? materials.bathDoor : materials.teak);
+          if (wall.axis === 'x') {
+            layerGroups.doors.add(makeBox(frameThick, opH, frameDepth, frameMat, cx - opW / 2 + frameThick / 2, cy, cz));
+            layerGroups.doors.add(makeBox(frameThick, opH, frameDepth, frameMat, cx + opW / 2 - frameThick / 2, cy, cz));
+            layerGroups.doors.add(makeBox(opW, frameThick, frameDepth, frameMat, cx, op.sill + opH - frameThick / 2, cz));
+          } else {
+            layerGroups.doors.add(makeBox(frameDepth, opH, frameThick, frameMat, cx, cy, cz - opW / 2 + frameThick / 2));
+            layerGroups.doors.add(makeBox(frameDepth, opH, frameThick, frameMat, cx, cy, cz + opW / 2 - frameThick / 2));
+            layerGroups.doors.add(makeBox(frameDepth, frameThick, opW, frameMat, cx, op.sill + opH - frameThick / 2, cz));
+          }
+
+          // Hinged Door Leaf Pivot
+          const leafW = opW - frameThick * 2;
+          const leafH = opH - frameThick;
+          const pivot = new THREE.Group();
+          const hingeRight = (op.hinge === 'right');
+          const swingSign = op.swing || 1;
+
+          if (wall.axis === 'x') {
+            const hx = cx + (hingeRight ? (opW / 2 - frameThick) : -(opW / 2 - frameThick));
+            pivot.position.set(hx, op.sill, cz);
+            const leaf = makeBox(leafW, leafH, 0.042, frameMat, hingeRight ? -leafW / 2 : leafW / 2, leafH / 2, 0);
+            // Brushed steel lever handle
+            const handleX = hingeRight ? -leafW + 0.09 : leafW - 0.09;
+            const handle = makeBox(0.11, 0.025, 0.09, materials.steel, handleX, 1.00, 0);
+            pivot.add(leaf, handle);
+
+            const openAngle = (hingeRight ? -1 : 1) * swingSign * (Math.PI * 0.46);
+            doorPivots.push({
+              pivot, kind: 'hinge', closedVal: 0, openVal: openAngle,
+              collider: { x1: cx - opW / 2, z1: cz - 0.12, x2: cx + opW / 2, z2: cz + 0.12, isDoor: true }
+            });
+          } else {
+            const hz = cz + (hingeRight ? (opW / 2 - frameThick) : -(opW / 2 - frameThick));
+            pivot.position.set(cx, op.sill, hz);
+            const leaf = makeBox(0.042, leafH, leafW, frameMat, 0, leafH / 2, hingeRight ? -leafW / 2 : leafW / 2);
+            const handleZ = hingeRight ? -leafW + 0.09 : leafW - 0.09;
+            const handle = makeBox(0.09, 0.025, 0.11, materials.steel, 0, 1.00, handleZ);
+            pivot.add(leaf, handle);
+
+            const openAngle = (hingeRight ? 1 : -1) * swingSign * (Math.PI * 0.46);
+            doorPivots.push({
+              pivot, kind: 'hinge', closedVal: 0, openVal: openAngle,
+              collider: { x1: cx - 0.12, z1: cz - opW / 2, x2: cx + 0.12, z2: cz + opW / 2, isDoor: true }
+            });
+          }
+          layerGroups.doors.add(pivot);
+
+        } else if (spec.kind === 'sliding') {
+          // Accessible Sliding Door (SD / SD1) with top track & sliding glass/wood panel
+          const trackMat = materials.windowFrame;
+          const panelW = opW * 0.54;
+          const panelH = opH - 0.04;
+          const pivot = new THREE.Group();
+
+          if (wall.axis === 'x') {
+            layerGroups.doors.add(makeBox(opW, 0.045, frameDepth, trackMat, cx, op.sill + opH - 0.02, cz));
+            // Fixed half + sliding half
+            const fixedHalf = makeBox(panelW, panelH, 0.03, materials.glass, cx - opW * 0.23, op.sill + panelH / 2, cz - 0.02, false, false);
+            layerGroups.doors.add(fixedHalf);
+
+            pivot.position.set(cx + opW * 0.23, op.sill + panelH / 2, cz + 0.02);
+            const slideFrame = makeBox(panelW, panelH, 0.038, materials.pwdDoor, 0, 0, 0);
+            pivot.add(slideFrame);
+            doorPivots.push({
+              pivot, kind: 'slideX', closedVal: cx + opW * 0.23, openVal: cx - opW * 0.22,
+              collider: { x1: cx - opW / 2, z1: cz - 0.10, x2: cx + opW / 2, z2: cz + 0.10, isDoor: true }
+            });
+          } else {
+            layerGroups.doors.add(makeBox(frameDepth, 0.045, opW, trackMat, cx, op.sill + opH - 0.02, cz));
+            const fixedHalf = makeBox(0.03, panelH, panelW, materials.glass, cx - 0.02, op.sill + panelH / 2, cz - opW * 0.23, false, false);
+            layerGroups.doors.add(fixedHalf);
+
+            pivot.position.set(cx + 0.02, op.sill + panelH / 2, cz + opW * 0.23);
+            const slideFrame = makeBox(0.038, panelH, panelW, materials.pwdDoor, 0, 0, 0);
+            pivot.add(slideFrame);
+            doorPivots.push({
+              pivot, kind: 'slideZ', closedVal: cz + opW * 0.23, openVal: cz - opW * 0.22,
+              collider: { x1: cx - 0.10, z1: cz - opW / 2, x2: cx + 0.10, z2: cz + opW / 2, isDoor: true }
+            });
+          }
+          layerGroups.doors.add(pivot);
+
+        } else if (spec.kind === 'window' || spec.kind === 'swnv' || spec.kind === 'grill' || spec.kind === 'vent') {
+          // Window / Ventilator Frame + Glazing + Mullions / Grill Bars
+          const fMat = materials.windowFrame;
+          if (wall.axis === 'x') {
+            // Top & bottom sill/head frames
+            layerGroups.joinery.add(makeBox(opW, 0.04, frameDepth, fMat, cx, op.sill + 0.02, cz));
+            layerGroups.joinery.add(makeBox(opW, 0.04, frameDepth, fMat, cx, op.sill + opH - 0.02, cz));
+            layerGroups.joinery.add(makeBox(0.04, opH, frameDepth, fMat, cx - opW / 2 + 0.02, cy, cz));
+            layerGroups.joinery.add(makeBox(0.04, opH, frameDepth, fMat, cx + opW / 2 - 0.02, cy, cz));
+            // Center vertical mullion
+            layerGroups.joinery.add(makeBox(0.03, opH, 0.04, fMat, cx, cy, cz));
+            // If SW/NV, add horizontal transom bar separating sliding window (0.90m) and top N-ventilator (0.60m)
+            if (spec.kind === 'swnv' && opH > 1.0) {
+              layerGroups.joinery.add(makeBox(opW, 0.04, frameDepth, fMat, cx, op.sill + opH * 0.62, cz));
+            }
+            // If OGW (Openable Grill Window), add security grill bars
+            if (spec.kind === 'grill') {
+              for (let i = 1; i <= 4; i++) {
+                const gy = op.sill + (opH / 5) * i;
+                layerGroups.joinery.add(makeBox(opW - 0.04, 0.015, 0.015, materials.steel, cx, gy, cz));
+              }
+            }
+            // Glass pane
+            const glassPane = makeBox(opW - 0.06, opH - 0.06, 0.015, materials.glass, cx, cy, cz, false, false);
+            layerGroups.joinery.add(glassPane);
+          } else {
+            layerGroups.joinery.add(makeBox(frameDepth, 0.04, opW, fMat, cx, op.sill + 0.02, cz));
+            layerGroups.joinery.add(makeBox(frameDepth, 0.04, opW, fMat, cx, op.sill + opH - 0.02, cz));
+            layerGroups.joinery.add(makeBox(frameDepth, opH, 0.04, fMat, cx, cy, cz - opW / 2 + 0.02));
+            layerGroups.joinery.add(makeBox(frameDepth, opH, 0.04, fMat, cx, cy, cz + opW / 2 - 0.02));
+            layerGroups.joinery.add(makeBox(0.04, opH, 0.03, fMat, cx, cy, cz));
+            const glassPane = makeBox(0.015, opH - 0.06, opW - 0.06, materials.glass, cx, cy, cz, false, false);
+            layerGroups.joinery.add(glassPane);
+          }
+        } else if (spec.kind === 'opening') {
+          // Cased Opening Architrave Trim (O1 & O)
+          const trimMat = materials.skirting;
+          if (wall.axis === 'x') {
+            layerGroups.joinery.add(makeBox(0.03, opH, frameDepth, trimMat, cx - opW / 2 + 0.015, cy, cz));
+            layerGroups.joinery.add(makeBox(0.03, opH, frameDepth, trimMat, cx + opW / 2 - 0.015, cy, cz));
+            layerGroups.joinery.add(makeBox(opW, 0.03, frameDepth, trimMat, cx, op.sill + opH - 0.015, cz));
+          } else {
+            layerGroups.joinery.add(makeBox(frameDepth, opH, 0.03, trimMat, cx, cy, cz - opW / 2 + 0.015));
+            layerGroups.joinery.add(makeBox(frameDepth, opH, 0.03, trimMat, cx, cy, cz + opW / 2 - 0.015));
+            layerGroups.joinery.add(makeBox(frameDepth, 0.03, opW, trimMat, cx, op.sill + opH - 0.015, cz));
+          }
+        }
+      }
+
+      // Build interior furniture, kitchen counters, sanitaryware, lofts, and lights for a unit
+      function buildUnitFurnitureAndFixtures(unit, offsetX) {
+        const fg = layerGroups.furniture;
+        const lg = layerGroups.lofts;
+
+        // 1. HALL FURNITURE (X: 0.20..3.20, Z: 3.10..5.60)
+        // TV & Media Console against West wall (X = 0.20..0.55, Z = 4.00..4.95)
+        fg.add(makeBox(0.36, 0.46, 1.15, materials.walnut, offsetX + 0.40, 0.23, 4.45));
+        // Flat-screen TV panel mounted above console
+        fg.add(makeBox(0.05, 0.62, 1.02, materials.granite, offsetX + 0.26, 1.18, 4.45));
+        // Center Coffee Table (X = 0.95..1.35, Z = 4.10..4.80)
+        fg.add(makeBox(0.45, 0.38, 0.78, materials.oak, offsetX + 1.12, 0.19, 4.45));
+        // Two Lounge Armchairs facing West TV (as drawn in the CAD blueprint!)
+        [4.05, 4.85].forEach(zPos => {
+          // Seat base
+          fg.add(makeBox(0.62, 0.40, 0.64, materials.sofaFabric, offsetX + 1.80, 0.20, zPos));
+          // Curved/angled backrest on East side of chair
+          fg.add(makeBox(0.14, 0.76, 0.64, materials.sofaFabric, offsetX + 2.05, 0.38, zPos));
+          // Armrests
+          fg.add(makeBox(0.60, 0.56, 0.10, materials.sofaFabric, offsetX + 1.80, 0.28, zPos - 0.28));
+          fg.add(makeBox(0.60, 0.56, 0.10, materials.sofaFabric, offsetX + 1.80, 0.28, zPos + 0.28));
+        });
+        // Tight furniture colliders for Hall coffee table & chairs (leaving East circulation aisle X=2.15..3.20 wide open)
+        wallColliders.push({ x1: offsetX + 0.92, z1: 4.08, x2: offsetX + 1.32, z2: 4.82, isDoor: false });
+        wallColliders.push({ x1: offsetX + 1.52, z1: 3.80, x2: offsetX + 2.08, z2: 5.12, isDoor: false });
+
+        // 2. BEDROOM FURNITURE (X: 3.30..6.40, Z: 3.10..5.60)
+        // Double Bed against East Wall (X = 4.70..6.38, Z = 3.95..5.45)
+        const bedX = offsetX + 5.52;
+        const bedZ = 4.72;
+        // Bed frame & wood headboard against East wall
+        fg.add(makeBox(1.72, 0.32, 1.48, materials.walnut, bedX, 0.16, bedZ));
+        fg.add(makeBox(0.10, 1.05, 1.50, materials.walnut, offsetX + 6.34, 0.52, bedZ));
+        // Mattress & Duvet Blanket
+        fg.add(makeBox(1.62, 0.20, 1.38, materials.bedFabric, bedX - 0.03, 0.40, bedZ));
+        const blanketMat = (unit.id === 'pwd') ? materials.blanketEmerald : materials.blanketTeal;
+        fg.add(makeBox(0.95, 0.22, 1.40, blanketMat, bedX - 0.36, 0.41, bedZ));
+        // Two Pillows near East headboard
+        fg.add(makeBox(0.28, 0.12, 0.52, materials.bedFabric, offsetX + 6.10, 0.54, bedZ - 0.34));
+        fg.add(makeBox(0.28, 0.12, 0.52, materials.bedFabric, offsetX + 6.10, 0.54, bedZ + 0.34));
+        wallColliders.push({ x1: offsetX + 4.74, z1: 4.02, x2: offsetX + 6.38, z2: 5.42, isDoor: false });
+
+        // Built-in Wardrobe along West Wall of Bedroom (shown in General Unit at X = 3.30..3.75, Z = 4.20..5.55)
+        if (unit.id === 'general') {
+          fg.add(makeBox(0.46, 2.10, 1.32, materials.oak, offsetX + 3.54, 1.05, 4.88));
+          // Overhead Bedroom Loft above wardrobe
+          lg.add(makeBox(0.50, 0.55, 1.35, materials.loft, offsetX + 3.56, 2.38, 4.88));
+          wallColliders.push({ x1: offsetX + 3.30, z1: 4.20, x2: offsetX + 3.80, z2: 5.56, isDoor: false });
+        } else {
+          // In PwD unit, wardrobe is placed along North-West corner or East bedside to keep 2.5m SD sliding door clear
+          fg.add(makeBox(0.45, 0.55, 0.45, materials.oak, offsetX + 6.12, 0.28, 3.65));
+        }
+
+        // 3. KITCHEN COUNTER, SINK, STOVE, FRIDGE & OVERHEAD LOFT (X: 1.40..3.20, Z: 0.20..2.90)
+        // Refrigerator (FRIDGE in bottom-left corner of Kitchen: X = 1.42..2.00, Z = 2.32..2.88)
+        fg.add(makeBox(0.58, 1.68, 0.56, materials.applianceSilver, offsetX + 1.72, 0.84, 2.60));
+        // L-Shaped Lower Cabinets + Black Granite Countertop
+        // Left counter run (X = 1.40..1.98, Z = 0.78..2.26)
+        fg.add(makeBox(0.56, 0.82, 1.46, materials.oak, offsetX + 1.69, 0.41, 1.51));
+        fg.add(makeBox(0.60, 0.04, 1.50, materials.granite, offsetX + 1.70, 0.84, 1.51));
+        // Rear (North) counter run (X = 1.40..2.65, Z = 0.20..0.78)
+        fg.add(makeBox(1.24, 0.82, 0.56, materials.oak, offsetX + 2.02, 0.41, 0.49));
+        fg.add(makeBox(1.28, 0.04, 0.60, materials.granite, offsetX + 2.04, 0.84, 0.50));
+        // 2-Burner Gas Stove on West Counter (X = 1.70, Z = 1.55)
+        fg.add(makeBox(0.42, 0.05, 0.68, materials.steel, offsetX + 1.70, 0.88, 1.55));
+        const burnerGeo = new THREE.CylinderGeometry(0.09, 0.09, 0.03, 16);
+        const b1 = new THREE.Mesh(burnerGeo, materials.granite);
+        b1.position.set(offsetX + 1.70, 0.91, 1.38);
+        const b2 = new THREE.Mesh(burnerGeo, materials.granite);
+        b2.position.set(offsetX + 1.70, 0.91, 1.72);
+        fg.add(b1, b2);
+        // Stainless Steel Kitchen Sink on North Counter (X = 2.25, Z = 0.48)
+        fg.add(makeBox(0.56, 0.03, 0.44, materials.steel, offsetX + 2.25, 0.865, 0.48));
+        // Faucet neck
+        fg.add(makeBox(0.04, 0.22, 0.14, materials.steel, offsetX + 2.25, 0.96, 0.32));
+        // Kitchen Overhead Concrete Loft (X-marked box along North wall at Y = 2.15m)
+        lg.add(makeBox(1.78, 0.08, 0.58, materials.loft, offsetX + 2.30, 2.15, 0.50));
+        wallColliders.push({ x1: offsetX + 1.40, z1: 0.20, x2: offsetX + 2.02, z2: 2.90, isDoor: false });
+        wallColliders.push({ x1: offsetX + 1.40, z1: 0.20, x2: offsetX + 2.68, z2: 0.82, isDoor: false });
+
+        // 4. SANITARYWARE & WASHING MACHINE (DIFFERENT BETWEEN GENERAL & PwD UNIT)
+        if (unit.id === 'general') {
+          // Washing Machine (WM) in Passage bottom-right (X = 3.85, Z = 2.65)
+          fg.add(makeBox(0.56, 0.84, 0.56, materials.ceramicWhite, offsetX + 3.90, 0.42, 2.68));
+          fg.add(makeBox(0.32, 0.32, 0.04, materials.glass, offsetX + 3.90, 0.46, 2.39, false, false));
+
+          // W.C. Squat/Floor Pan & Cistern (X = 3.75, Z = 0.65)
+          fg.add(makeBox(0.44, 0.14, 0.58, materials.ceramicWhite, offsetX + 3.75, 0.07, 0.68));
+          fg.add(makeBox(0.38, 0.34, 0.16, materials.ceramicWhite, offsetX + 3.75, 0.72, 0.30));
+
+          // Bathroom Washbasin on West Wall (X = 4.46, Z = 2.15) & Shower on North Wall
+          fg.add(makeBox(0.38, 0.18, 0.46, materials.ceramicWhite, offsetX + 4.50, 0.82, 2.15));
+          fg.add(makeBox(0.03, 0.65, 0.46, materials.glass, offsetX + 4.33, 1.38, 2.15, false, false));
+          fg.add(makeBox(0.12, 0.06, 0.28, materials.steel, offsetX + 4.80, 2.02, 1.74));
+        } else {
+          // PwD Unit: Accessible Combined Bath/WC (X = 3.30..5.30, Z = 0.20..3.00)
+          // Western Commode in NW quadrant (X = 3.85, Z = 0.58)
+          fg.add(makeBox(0.44, 0.44, 0.62, materials.ceramicWhite, offsetX + 3.85, 0.22, 0.60));
+          fg.add(makeBox(0.42, 0.40, 0.18, materials.ceramicWhite, offsetX + 3.85, 0.64, 0.32));
+          // Stainless Steel Accessible Grab Rails beside WC
+          fg.add(makeBox(0.04, 0.04, 0.70, materials.steel, offsetX + 3.52, 0.75, 0.62));
+          fg.add(makeBox(0.04, 0.04, 0.70, materials.steel, offsetX + 4.18, 0.75, 0.62));
+
+          // Roll-under Accessible Washbasin on East Wall (X = 5.05, Z = 1.95)
+          fg.add(makeBox(0.42, 0.14, 0.50, materials.ceramicWhite, offsetX + 5.06, 0.78, 1.95));
+          fg.add(makeBox(0.03, 0.70, 0.50, materials.glass, offsetX + 5.27, 1.35, 1.95, false, false));
+
+          // 1.50m Wheelchair Turning Circle Visual Ring on PwD Bathroom Floor!
+          const ringGeo = new THREE.RingGeometry(0.71, 0.75, 48);
+          ringGeo.rotateX(-Math.PI / 2);
+          const ringMat = new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide, transparent: true, opacity: 0.75 });
+          const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+          ringMesh.position.set(offsetX + 4.18, 0.015, 2.12);
+          layerGroups.floorMarkings.add(ringMesh);
+
+          // Washing Machine (WM) in Balcony of PwD Unit (X = 5.68, Z = 2.15)
+          fg.add(makeBox(0.54, 0.84, 0.54, materials.ceramicWhite, offsetX + 5.70, 0.42, 2.15));
+        }
+      }
+
+      // Build CAD Dimension Markers in 3D space (6.60m width & 5.80m depth bars)
+      function build3DDimensionGuides(unit, offsetX) {
+        const dg = layerGroups.dimensions;
+        const lineMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.65 });
+
+        // Front 6.60m total width line at Z = 6.25
+        const ptsFront = [
+          new THREE.Vector3(offsetX + 0.0, 0.03, 6.20),
+          new THREE.Vector3(offsetX + 6.6, 0.03, 6.20)
+        ];
+        dg.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ptsFront), lineMat));
+
+        // Left 5.80m total depth line at X = -0.45
+        const ptsLeft = [
+          new THREE.Vector3(offsetX - 0.40, 0.03, 0.0),
+          new THREE.Vector3(offsetX - 0.40, 0.03, 5.8)
+        ];
+        dg.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ptsLeft), lineMat));
+      }
+
+      function getEffectiveWallHeight() {
+        if (state.wallMode === 'cutaway') return 1.30;
+        if (state.wallMode === 'none') return 0.14;
+        return state.wallHeight;
+      }
+
+      // Rebuild the entire 3D scene for the active unit(s)
+      function rebuildScene() {
+        // Clear previous children
+        Object.values(layerGroups).forEach(g => {
+          while (g.children.length > 0) {
+            const obj = g.children.pop();
+            if (obj.geometry) obj.geometry.dispose();
+          }
+        });
+        while (roomLightsGroup.children.length > 0) {
+          roomLightsGroup.remove(roomLightsGroup.children[0]);
+        }
+        roomFloorMeshes = [];
+        doorPivots = [];
+        wallColliders = [];
+        labelAnchors = [];
+        labelsContainer.innerHTML = '';
+
+        // Update X-ray wall transparency if selected
+        const isXray = (state.wallMode === 'xray');
+        materials.extWall.transparent = isXray;
+        materials.extWall.opacity = isXray ? 0.30 : 1.0;
+        materials.intWall.transparent = isXray;
+        materials.intWall.opacity = isXray ? 0.30 : 1.0;
+
+        const unitsToBuild = [];
+        if (state.activeUnit === 'general') {
+          unitsToBuild.push({ unit: UNITS_DATA.general, offsetX: 0 });
+        } else if (state.activeUnit === 'pwd') {
+          unitsToBuild.push({ unit: UNITS_DATA.pwd, offsetX: 0 });
+        } else {
+          unitsToBuild.push({ unit: UNITS_DATA.general, offsetX: -3.80 });
+          unitsToBuild.push({ unit: UNITS_DATA.pwd, offsetX: 4.40 });
+        }
+
+        unitsToBuild.forEach(({ unit, offsetX }) => {
+          // 1. Concrete Foundation / Floor Slab Plinth
+          const plinth = makeBox(6.80, 0.15, 6.00, materials.slabBase, offsetX + 3.30, -0.08, 2.90, false, true);
+          layerGroups.extWalls.add(plinth);
+
+          // 2. Room Floor Plates + Warm Interior Room Point Lights + 3D Room Labels
+          unit.rooms.forEach(room => {
+            const rw = room.bounds.x2 - room.bounds.x1;
+            const rd = room.bounds.z2 - room.bounds.z1;
+            const rx = offsetX + (room.bounds.x1 + room.bounds.x2) / 2;
+            const rz = (room.bounds.z1 + room.bounds.z2) / 2;
+
+            const fMat = (materials.floorTypes[room.floorType] || materials.floorTypes.vitrified_ivory).clone();
+            const isSelected = (state.selectedRoomId === room.id && (state.activeUnit !== 'both' || state.selectedRoomUnit === unit.id));
+            if (isSelected) {
+              fMat.emissive = new THREE.Color(0x0284c7);
+              fMat.emissiveIntensity = 0.32;
+            }
+
+            const floorMesh = makeBox(rw, 0.02, rd, fMat, rx, 0.005, rz, false, true);
+            floorMesh.userData = { roomId: room.id, unitId: unit.id, roomData: room, offsetX };
+            layerGroups.extWalls.add(floorMesh);
+            roomFloorMeshes.push(floorMesh);
+
+            // Interior warm LED ceiling light per main room
+            if (room.id !== 'ots' && room.id !== 'duct') {
+              const ptLight = new THREE.PointLight(0xffedd5, state.lightingPreset === 'evening' ? 0.85 : 0.32, 5.5);
+              ptLight.position.set(rx, state.wallHeight - 0.25, rz);
+              roomLightsGroup.add(ptLight);
+            }
+
+            // Floating 3D Room Label
+            labelAnchors.push({
+              kind: 'room',
+              roomId: room.id,
+              unitId: unit.id,
+              title: room.name,
+              dims: room.dimsText,
+              area: `${room.areaSqm.toFixed(2)} m²`,
+              pos3d: new THREE.Vector3(rx, 0.35, rz)
+            });
+          });
+
+          // 3. Exterior & Interior Walls + Joinery
+          unit.walls.forEach(w => buildWallWithOpenings(w, offsetX, unit.id));
+
+          // 4. Furniture, Appliances & Sanitaryware
+          buildUnitFurnitureAndFixtures(unit, offsetX);
+
+          // 5. Optional Upper Ceiling Slab
+          const ceilMesh = makeBox(6.60, 0.08, 5.80, materials.ceiling, offsetX + 3.30, state.wallHeight + 0.04, 2.90, false, false);
+          layerGroups.ceiling.add(ceilMesh);
+
+          // 6. 3D Dimension Guides
+          build3DDimensionGuides(unit, offsetX);
+        });
+
+        // Create DOM elements for 3D labels
+        build3DLabelDOM();
+        applyDoorStatesImmediate();
+        syncLayerVisibility();
+      }
+
+      function build3DLabelDOM() {
+        labelsContainer.innerHTML = '';
+        labelAnchors.forEach(item => {
+          const el = document.createElement('div');
+          if (item.kind === 'room') {
+            el.className = 'room-label-3d' + (state.selectedRoomId === item.roomId ? ' selected' : '');
+            el.innerHTML = `<div>${item.title}</div><div class="text-[9.5px] font-mono-code text-sky-300 font-normal">${item.dims} • ${item.area}</div>`;
+            el.addEventListener('click', (e) => {
+              e.stopPropagation();
+              selectRoom(item.roomId, item.unitId, false);
+            });
+          } else {
+            el.className = 'joinery-tag-3d';
+            el.textContent = item.code;
+            el.title = item.title;
+            el.addEventListener('click', (e) => {
+              e.stopPropagation();
+              document.getElementById('status-hover-info').textContent = item.title;
+            });
+          }
+          labelsContainer.appendChild(el);
+          item.el = el;
+        });
+      }
+
+      function update3DLabelsProjection() {
+        if (state.viewMode === 'plan2d') return;
+        const rect = canvas3d.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        labelAnchors.forEach(item => {
+          if (!item.el) return;
+          const visibleToggle = (item.kind === 'room')
+            ? state.visibility.roomLabels
+            : (state.visibility.joineryLabels && (!item.isDoor || state.visibility.doors));
+          if (!visibleToggle || (state.viewMode === 'walk' && item.kind === 'joinery')) {
+            item.el.style.display = 'none';
+            return;
+          }
+          const v = item.pos3d.clone().project(camera);
+          if (v.z > 1 || v.z < -1) {
+            item.el.style.display = 'none';
+            return;
+          }
+          const x = (v.x * 0.5 + 0.5) * rect.width;
+          const y = (-(v.y * 0.5) + 0.5) * rect.height;
+          if (x < 10 || x > rect.width - 10 || y < 10 || y > rect.height - 10) {
+            item.el.style.display = 'none';
+            return;
+          }
+          item.el.style.display = 'block';
+          item.el.style.left = `${x}px`;
+          item.el.style.top = `${y}px`;
+        });
+      }
+
+      function updateMarkingsButtonsUI() {
+        const anyMarkingOn = Boolean(
+          state.visibility.roomLabels ||
+          state.visibility.joineryLabels ||
+          state.visibility.dimensions ||
+          state.visibility.floorMarkings
+        );
+        state.markingsVisible = anyMarkingOn;
+
+        const topBtn = document.getElementById('btn-toggle-markings');
+        const topLbl = document.getElementById('markings-state-label');
+        if (topBtn && topLbl) {
+          topBtn.classList.toggle('active', anyMarkingOn);
+          topLbl.textContent = anyMarkingOn ? 'Markings: Shown' : 'Markings: Hidden';
+        }
+
+        const btn2d = document.getElementById('btn-2d-toggle-markings');
+        if (btn2d) {
+          btn2d.classList.toggle('active', anyMarkingOn);
+          btn2d.textContent = anyMarkingOn ? 'Markings: ON' : 'Markings: OFF';
+        }
+
+        const sideBtn = document.getElementById('btn-sidebar-markings-all');
+        if (sideBtn) {
+          sideBtn.classList.toggle('active', anyMarkingOn);
+          sideBtn.textContent = anyMarkingOn ? 'Hide All' : 'Show All';
+        }
+
+        const scaleHud = document.getElementById('scale-bar-hud');
+        if (scaleHud) {
+          scaleHud.style.display = (state.visibility.dimensions || state.visibility.floorMarkings) ? '' : 'none';
+        }
+      }
+
+      function toggleAllMarkings(forceState = null) {
+        const nextState = (forceState !== null) ? Boolean(forceState) : !state.markingsVisible;
+        state.markingsVisible = nextState;
+        state.visibility.roomLabels    = nextState;
+        state.visibility.joineryLabels = nextState;
+        state.visibility.dimensions    = nextState;
+        state.visibility.floorMarkings = nextState;
+
+        const ids = [
+          ['vis-room-labels', 'roomLabels'],
+          ['vis-joinery-labels', 'joineryLabels'],
+          ['vis-dimensions', 'dimensions'],
+          ['vis-floor-markings', 'floorMarkings']
+        ];
+        ids.forEach(([id, key]) => {
+          const el = document.getElementById(id);
+          if (el) el.checked = state.visibility[key];
+        });
+
+        syncLayerVisibility();
+        update3DLabelsProjection();
+        draw2DFloorPlan();
+      }
+
+      function updateDoorsVisibilityUI() {
+        const shown = Boolean(state.visibility.doors);
+        const rmBtn = document.getElementById('btn-remove-doors');
+        const rmLbl = document.getElementById('remove-doors-label');
+        if (rmBtn && rmLbl) {
+          rmBtn.classList.toggle('active', shown);
+          rmLbl.textContent = shown ? 'Doors: Shown' : 'Doors: Removed';
+        }
+        const chk = document.getElementById('vis-doors');
+        if (chk) chk.checked = shown;
+        const fpRmBtn = document.getElementById('btn-fp-remove-doors');
+        if (fpRmBtn) {
+          fpRmBtn.textContent = shown ? 'Remove Doors (X)' : 'Restore Doors (X)';
+        }
+      }
+
+      function toggleDoorsVisibility(forceState = null) {
+        state.visibility.doors = (forceState !== null) ? Boolean(forceState) : !state.visibility.doors;
+        syncLayerVisibility();
+        update3DLabelsProjection();
+        draw2DFloorPlan();
+      }
+
+      function syncLayerVisibility() {
+        layerGroups.extWalls.visible      = state.visibility.extWalls;
+        layerGroups.intWalls.visible      = state.visibility.intWalls;
+        layerGroups.doors.visible         = state.visibility.doors;
+        layerGroups.joinery.visible       = state.visibility.joinery;
+        layerGroups.furniture.visible     = state.visibility.furniture;
+        layerGroups.lofts.visible         = state.visibility.lofts && (state.wallMode === 'full' || state.wallMode === 'xray');
+        layerGroups.ceiling.visible       = state.visibility.ceiling;
+        layerGroups.dimensions.visible    = state.visibility.dimensions;
+        layerGroups.floorMarkings.visible = state.visibility.floorMarkings;
+        gridHelper.visible                = state.visibility.floorMarkings;
+        updateMarkingsButtonsUI();
+        updateDoorsVisibilityUI();
+      }
+
+      function applyDoorStatesImmediate() {
+        const t = state.doorsOpen ? 1 : 0;
+        state.doorAnimProgress = t;
+        doorPivots.forEach(d => {
+          const val = d.closedVal + (d.openVal - d.closedVal) * t;
+          if (d.kind === 'hinge') d.pivot.rotation.y = val;
+          else if (d.kind === 'slideX') d.pivot.position.x = val;
+          else if (d.kind === 'slideZ') d.pivot.position.z = val;
+        });
+      }
+
+      // =========================================================================
+      // 5. ROOM SELECTION, CAMERA FOCUS & SIDEBAR UI
+      // =========================================================================
+      function getCurrentUnitObj() {
+        return (state.activeUnit === 'pwd') ? UNITS_DATA.pwd : UNITS_DATA.general;
+      }
+
+      function renderRoomListSidebar() {
+        const unit = getCurrentUnitObj();
+        document.getElementById('sidebar-unit-title').textContent =
+          state.activeUnit === 'both' ? 'General + PwD Comparison' : `${unit.name} Plan`;
+        document.getElementById('sidebar-unit-area').textContent =
+          state.activeUnit === 'both' ? '26.27 / 28.08 m²' : unit.carpetArea;
+
+        const container = document.getElementById('room-list-container');
+        container.innerHTML = '';
+
+        unit.rooms.forEach(room => {
+          const isSel = (state.selectedRoomId === room.id);
+          const btn = document.createElement('button');
+          btn.className = `w-full text-left px-2.5 py-2 rounded-lg glass-pill flex items-center justify-between text-xs ${isSel ? 'active' : ''}`;
+          btn.innerHTML = `
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full" style="background:${room.stroke2d}"></span>
+              <div>
+                <div class="font-medium text-white">${room.name}</div>
+                <div class="text-[10px] font-mono-code text-slate-400">${room.dimsText}</div>
+              </div>
+            </div>
+            <span class="text-[11px] font-mono-code text-sky-300 font-semibold">${room.areaSqm.toFixed(2)} m²</span>
+          `;
+          btn.addEventListener('click', () => selectRoom(room.id, unit.id, true));
+          container.appendChild(btn);
+        });
+      }
+
+      function selectRoom(roomId, unitId = null, focusCam = false) {
+        state.selectedRoomId = roomId;
+        if (unitId) state.selectedRoomUnit = unitId;
+
+        const clearBtn = document.getElementById('btn-clear-room');
+        const detailCard = document.getElementById('room-detail-card');
+
+        if (!roomId) {
+          clearBtn.classList.add('hidden');
+          detailCard.classList.add('hidden');
+          rebuildScene();
+          renderRoomListSidebar();
+          draw2DFloorPlan();
+          return;
+        }
+
+        const unit = (unitId && UNITS_DATA[unitId]) ? UNITS_DATA[unitId] : getCurrentUnitObj();
+        const room = unit.rooms.find(r => r.id === roomId) || unit.rooms[0];
+        if (!room) return;
+
+        clearBtn.classList.remove('hidden');
+        detailCard.classList.remove('hidden');
+
+        document.getElementById('detail-room-name').textContent = room.name;
+        document.getElementById('detail-room-badge').textContent = `${room.areaSqm.toFixed(2)} m² (${(room.areaSqm * 10.764).toFixed(0)} ft²)`;
+        document.getElementById('detail-room-desc').textContent = room.desc;
+        document.getElementById('detail-room-dims').textContent = room.dimsText;
+        document.getElementById('detail-room-floor').textContent = room.floorLabel;
+        document.getElementById('detail-room-furniture').textContent = room.furnitureList;
+
+        const joineryDiv = document.getElementById('detail-room-joinery');
+        joineryDiv.innerHTML = '';
+        room.joineryCodes.forEach(code => {
+          const sp = JOINERY_SPECS[code];
+          const pill = document.createElement('span');
+          pill.className = 'px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[10px] font-mono-code text-sky-300';
+          pill.textContent = sp ? `${code} (${sp.w}×${sp.h}m)` : code;
+          joineryDiv.appendChild(pill);
+        });
+
+        rebuildScene();
+        renderRoomListSidebar();
+        draw2DFloorPlan();
+
+        if (focusCam) {
+          focusCameraOnRoom(room, unit.id);
+        }
+      }
+
+      // Smooth camera transition animation
+      let camTween = null;
+      function animateCameraTo(pos, target, durationMs = 650) {
+        if (state.viewMode === 'walk') return;
+        camTween = {
+          startPos: camera.position.clone(),
+          endPos: pos.clone(),
+          startTarget: orbitControls.target.clone(),
+          endTarget: target.clone(),
+          startTime: performance.now(),
+          duration: durationMs
+        };
+      }
+
+      function focusCameraOnRoom(room, unitId) {
+        const offsetX = (state.activeUnit === 'both') ? (unitId === 'pwd' ? 4.40 : -3.80) : 0;
+        const rx = offsetX + (room.bounds.x1 + room.bounds.x2) / 2;
+        const rz = (room.bounds.z1 + room.bounds.z2) / 2;
+
+        if (state.viewMode === 'walk') {
+          state.fp.pos.set(offsetX + room.spawn.x, state.fp.eyeHeight, room.spawn.z);
+          state.fp.yaw = room.spawn.yaw || 0;
+          state.fp.pitch = -0.05;
+          return;
+        }
+
+        const target = new THREE.Vector3(rx, 0.85, rz);
+        const pos = new THREE.Vector3(rx + 2.2, 5.2, rz + 3.8);
+        animateCameraTo(pos, target, 600);
+      }
+
+      function setCameraPreset(preset) {
+        if (state.viewMode === 'walk') setViewMode('orbit');
+        const center = new THREE.Vector3(state.activeUnit === 'both' ? 3.60 : 3.30, 0.80, 2.90);
+        const dist = state.activeUnit === 'both' ? 14.5 : 9.8;
+        let pos;
+        switch (preset) {
+          case 'top':   pos = new THREE.Vector3(center.x, dist * 1.25, center.z + 0.01); break;
+          case 'front': pos = new THREE.Vector3(center.x, 3.2, center.z + dist); break;
+          case 'back':  pos = new THREE.Vector3(center.x, 3.2, center.z - dist); break;
+          case 'left':  pos = new THREE.Vector3(center.x - dist, 3.5, center.z); break;
+          case 'right': pos = new THREE.Vector3(center.x + dist, 3.5, center.z); break;
+          default:      pos = new THREE.Vector3(center.x + dist * 0.45, dist * 0.82, center.z + dist * 0.85); break;
+        }
+        animateCameraTo(pos, center, 650);
+      }
+
+      // =========================================================================
+      // 6. FIRST-PERSON WALKTHROUGH & COLLISION ENGINE
+      // =========================================================================
+      function checkPointCollides(nx, nz, curX = state.fp.pos.x, curZ = state.fp.pos.z) {
+        if (!state.fp.collision) return false;
+        const radius = 0.14; // Forgiving clearance radius for 0.75m doorways
+        const testBox = (c) => {
+          if (nx + radius > c.x1 && nx - radius < c.x2 && nz + radius > c.z1 && nz - radius < c.z2) {
+            // If already overlapping this box at (curX, curZ), allow movement that escapes outward
+            const wasInside = (curX + radius > c.x1 && curX - radius < c.x2 && curZ + radius > c.z1 && curZ - radius < c.z2);
+            if (wasInside) {
+              const boxCx = (c.x1 + c.x2) * 0.5;
+              const boxCz = (c.z1 + c.z2) * 0.5;
+              const prevDist = Math.hypot(curX - boxCx, curZ - boxCz);
+              const nextDist = Math.hypot(nx - boxCx, nz - boxCz);
+              if (nextDist >= prevDist) return false;
+            }
+            return true;
+          }
+          return false;
+        };
+
+        for (let i = 0; i < wallColliders.length; i++) {
+          if (testBox(wallColliders[i])) return true;
+        }
+        if (!state.doorsOpen && state.visibility.doors) {
+          for (let i = 0; i < doorPivots.length; i++) {
+            const c = doorPivots[i].collider;
+            if (c && testBox(c)) return true;
+          }
+        }
+        return false;
+      }
+
+      function applyFirstPersonStep(dx, dz) {
+        const curX = state.fp.pos.x;
+        const curZ = state.fp.pos.z;
+        const candX = curX + dx;
+        if (!checkPointCollides(candX, curZ, curX, curZ)) {
+          state.fp.pos.x = candX;
+        }
+        const candZ = curZ + dz;
+        if (!checkPointCollides(state.fp.pos.x, candZ, state.fp.pos.x, curZ)) {
+          state.fp.pos.z = candZ;
+        }
+      }
+
+      function updateFirstPersonWalkthrough(dt) {
+        if (state.viewMode !== 'walk') return;
+
+        // Keyboard / Touch rotation
+        const turnSpeed = 1.95;
+        if (state.fp.keys.turnLeft)  state.fp.yaw += turnSpeed * dt;
+        if (state.fp.keys.turnRight) state.fp.yaw -= turnSpeed * dt;
+
+        // Forward and right horizontal vectors
+        const forwardX = -Math.sin(state.fp.yaw);
+        const forwardZ = -Math.cos(state.fp.yaw);
+        const rightX   =  Math.cos(state.fp.yaw);
+        const rightZ   = -Math.sin(state.fp.yaw);
+
+        let moveForward = 0;
+        let moveRight = 0;
+        if (state.fp.keys.forward)  moveForward += 1;
+        if (state.fp.keys.backward) moveForward -= 1;
+        if (state.fp.keys.right)    moveRight += 1;
+        if (state.fp.keys.left)     moveRight -= 1;
+
+        if (moveForward !== 0 || moveRight !== 0) {
+          // Manual input cancels any active click-to-walk target
+          state.fp.walkTarget = null;
+          const len = Math.hypot(moveForward, moveRight);
+          moveForward /= len;
+          moveRight /= len;
+
+          const stepDist = state.fp.speed * dt;
+          const dx = (forwardX * moveForward + rightX * moveRight) * stepDist;
+          const dz = (forwardZ * moveForward + rightZ * moveRight) * stepDist;
+          applyFirstPersonStep(dx, dz);
+        } else if (state.fp.walkTarget) {
+          // Smooth click-to-walk movement toward clicked floor destination
+          const tx = state.fp.walkTarget.x - state.fp.pos.x;
+          const tz = state.fp.walkTarget.z - state.fp.pos.z;
+          const dist = Math.hypot(tx, tz);
+          if (dist < 0.08) {
+            state.fp.walkTarget = null;
+          } else {
+            const step = Math.min(dist, state.fp.speed * dt);
+            const prevX = state.fp.pos.x;
+            const prevZ = state.fp.pos.z;
+            applyFirstPersonStep((tx / dist) * step, (tz / dist) * step);
+            // Stop if blocked by a wall
+            if (Math.hypot(state.fp.pos.x - prevX, state.fp.pos.z - prevZ) < 0.001) {
+              state.fp.walkTarget = null;
+            }
+          }
+        }
+
+        state.fp.pos.y = state.fp.eyeHeight;
+        camera.position.copy(state.fp.pos);
+
+        // Compute look target from yaw and pitch
+        const lookDir = new THREE.Vector3(
+          -Math.sin(state.fp.yaw) * Math.cos(state.fp.pitch),
+           Math.sin(state.fp.pitch),
+          -Math.cos(state.fp.yaw) * Math.cos(state.fp.pitch)
+        );
+        camera.lookAt(state.fp.pos.clone().add(lookDir));
+
+        // Update current room indicator & status coordinates
+        const unit = getCurrentUnitObj();
+        let activeRoomName = 'Exterior / Corridor';
+        for (const r of unit.rooms) {
+          if (state.fp.pos.x >= r.bounds.x1 && state.fp.pos.x <= r.bounds.x2 &&
+              state.fp.pos.z >= r.bounds.z1 && state.fp.pos.z <= r.bounds.z2) {
+            activeRoomName = r.name;
+            break;
+          }
+        }
+        document.getElementById('fp-current-room-badge').textContent = activeRoomName;
+        document.getElementById('status-coords').textContent = `X: ${state.fp.pos.x.toFixed(2)}m, Z: ${state.fp.pos.z.toFixed(2)}m`;
+      }
+
+      // =========================================================================
+      // 7. 2D CAD BLUEPRINT RENDERER (SYNCHRONIZED WITH 3D & SCANNED SHEET OVERLAY)
+      // =========================================================================
+      const canvas2d = document.getElementById('plan2d-canvas');
+      const ctx2d = canvas2d.getContext('2d');
+      const cadRefImg = document.getElementById('cad-reference-img');
+
+      function get2DTransform() {
+        const w = canvas2d.width;
+        const h = canvas2d.height;
+        const pad = 68;
+        const baseScale = Math.min((w - pad * 2) / 6.60, (h - pad * 2) / 5.80) * state.plan2d.zoom;
+        const ox = (w - 6.60 * baseScale) / 2 + state.plan2d.panX;
+        const oy = (h - 5.80 * baseScale) / 2 + state.plan2d.panY;
+        return { scale: baseScale, ox, oy };
+      }
+
+      function draw2DFloorPlan() {
+        if (state.viewMode !== 'plan2d' && state.viewMode !== 'split') return;
+        const rect = canvas2d.parentElement.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+        if (canvas2d.width !== Math.floor(rect.width) || canvas2d.height !== Math.floor(rect.height)) {
+          canvas2d.width = Math.floor(rect.width);
+          canvas2d.height = Math.floor(rect.height);
+        }
+
+        const w = canvas2d.width;
+        const h = canvas2d.height;
+        ctx2d.clearRect(0, 0, w, h);
+
+        // CAD Blueprint background grid
+        ctx2d.fillStyle = '#090d16';
+        ctx2d.fillRect(0, 0, w, h);
+
+        const { scale, ox, oy } = get2DTransform();
+        const toX = (mx) => ox + mx * scale;
+        const toY = (mz) => oy + mz * scale;
+
+        // Subtle 0.5m engineering grid (respects floorMarkings)
+        if (state.visibility.floorMarkings) {
+          ctx2d.strokeStyle = 'rgba(51, 65, 85, 0.28)';
+          ctx2d.lineWidth = 1;
+          for (let gx = 0; gx <= 7.0; gx += 0.5) {
+            ctx2d.beginPath(); ctx2d.moveTo(toX(gx), toY(-0.4)); ctx2d.lineTo(toX(gx), toY(6.2)); ctx2d.stroke();
+          }
+          for (let gz = 0; gz <= 6.0; gz += 0.5) {
+            ctx2d.beginPath(); ctx2d.moveTo(toX(-0.4), toY(gz)); ctx2d.lineTo(toX(7.0), toY(gz)); ctx2d.stroke();
+          }
+        }
+
+        const unit = getCurrentUnitObj();
+
+        // Optional Scanned CAD Sheet Underlay
+        if (state.plan2d.showCadOverlay && cadRefImg && cadRefImg.complete && cadRefImg.naturalWidth > 0) {
+          ctx2d.save();
+          ctx2d.globalAlpha = 0.35;
+          // Crop region corresponding to either General Unit or PwD Unit on the upright sheet
+          const iw = cadRefImg.naturalWidth;
+          const ih = cadRefImg.naturalHeight;
+          if (unit.id === 'general') {
+            ctx2d.drawImage(cadRefImg, iw * 0.145, ih * 0.415, iw * 0.18, ih * 0.33, toX(-0.1), toY(-0.1), 6.8 * scale, 6.0 * scale);
+          } else {
+            ctx2d.drawImage(cadRefImg, iw * 0.435, ih * 0.415, iw * 0.18, ih * 0.33, toX(-0.1), toY(-0.1), 6.8 * scale, 6.0 * scale);
+          }
+          ctx2d.restore();
+        }
+
+        // 1. Draw Rooms with Color Fills & Dimension Annotations
+        unit.rooms.forEach(room => {
+          const rx = toX(room.bounds.x1);
+          const ry = toY(room.bounds.z1);
+          const rw = (room.bounds.x2 - room.bounds.x1) * scale;
+          const rh = (room.bounds.z2 - room.bounds.z1) * scale;
+
+          const isSelected = (state.selectedRoomId === room.id);
+          const isHovered  = (state.hoveredRoomId === room.id);
+
+          ctx2d.fillStyle = isSelected ? 'rgba(56, 189, 248, 0.35)' : (isHovered ? 'rgba(56, 189, 248, 0.25)' : room.color2d);
+          ctx2d.fillRect(rx, ry, rw, rh);
+
+          ctx2d.strokeStyle = isSelected ? '#f59e0b' : room.stroke2d;
+          ctx2d.lineWidth = isSelected ? 2.5 : 1.2;
+          ctx2d.strokeRect(rx, ry, rw, rh);
+
+          // Cross-hatch for OTS / Service Duct as in architectural blueprint
+          if (room.id === 'ots' || room.id === 'duct') {
+            ctx2d.beginPath();
+            ctx2d.moveTo(rx, ry); ctx2d.lineTo(rx + rw, ry + rh);
+            ctx2d.moveTo(rx + rw, ry); ctx2d.lineTo(rx, ry + rh);
+            ctx2d.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+            ctx2d.lineWidth = 1;
+            ctx2d.stroke();
+          }
+
+          // Room Name & Dimension Text centered in room (respects roomLabels)
+          if (state.visibility.roomLabels) {
+            const lines = room.shortLabel.split('\n');
+            ctx2d.fillStyle = '#f8fafc';
+            ctx2d.font = `600 ${Math.max(10, Math.min(13, scale * 0.16))}px Inter, sans-serif`;
+            ctx2d.textAlign = 'center';
+            ctx2d.fillText(lines[0], rx + rw / 2, ry + rh / 2 - 4);
+            if (lines[1] && state.visibility.dimensions) {
+              ctx2d.fillStyle = '#93c5fd';
+              ctx2d.font = `500 ${Math.max(9, Math.min(11, scale * 0.135))}px "JetBrains Mono", monospace`;
+              ctx2d.fillText(lines[1], rx + rw / 2, ry + rh / 2 + 11);
+            }
+          }
+        });
+
+        // 1b. Draw 2D CAD Furniture Symbols (Sofa chairs, Bed, Kitchen L-counter + Stove + Sink, Wheelchair circle)
+        ctx2d.save();
+        ctx2d.strokeStyle = 'rgba(203, 213, 225, 0.55)';
+        ctx2d.lineWidth = 1.2;
+        // Kitchen L-counter outline
+        ctx2d.strokeRect(toX(1.40), toY(0.20), 1.25 * scale, 0.58 * scale);
+        ctx2d.strokeRect(toX(1.40), toY(0.78), 0.58 * scale, 1.48 * scale);
+        // Fridge box
+        ctx2d.strokeRect(toX(1.42), toY(2.32), 0.56 * scale, 0.54 * scale);
+        // Hall TV + Coffee Table + 2 Armchairs
+        ctx2d.strokeRect(toX(0.90), toY(4.10), 0.45 * scale, 0.75 * scale);
+        ctx2d.strokeRect(toX(1.52), toY(3.82), 0.55 * scale, 0.55 * scale);
+        ctx2d.strokeRect(toX(1.52), toY(4.55), 0.55 * scale, 0.55 * scale);
+        // Bedroom Double Bed
+        ctx2d.strokeRect(toX(4.70), toY(4.00), 1.68 * scale, 1.45 * scale);
+        // PwD Wheelchair 1.50m Turning Circle (respects floorMarkings)
+        if (unit.id === 'pwd' && state.visibility.floorMarkings) {
+          ctx2d.save();
+          ctx2d.setLineDash([5, 4]);
+          ctx2d.strokeStyle = '#10b981';
+          ctx2d.lineWidth = 1.8;
+          ctx2d.beginPath();
+          ctx2d.arc(toX(4.18), toY(2.12), 0.75 * scale, 0, Math.PI * 2);
+          ctx2d.stroke();
+          ctx2d.restore();
+        }
+        ctx2d.restore();
+
+        // 2. Draw Structural Walls (0.20m Exterior & 0.10m Interior) and Door Swing Arcs
+        unit.walls.forEach(wall => {
+          const length = (wall.axis === 'x') ? (wall.x2 - wall.x1) : (wall.z2 - wall.z1);
+          const ops = (wall.openings || []).slice().sort((a, b) => a.offset - b.offset);
+          let cursor = 0;
+
+          const drawSolid2D = (s0, s1) => {
+            if (s1 - s0 <= 0.005) return;
+            let x1, z1, x2, z2;
+            if (wall.axis === 'x') {
+              x1 = wall.x1 + s0; x2 = wall.x1 + s1;
+              z1 = wall.z1;      z2 = wall.z2;
+            } else {
+              x1 = wall.x1;      x2 = wall.x2;
+              z1 = wall.z1 + s0; z2 = wall.z1 + s1;
+            }
+            ctx2d.fillStyle = wall.type === 'ext' ? '#e2e8f0' : '#94a3b8';
+            ctx2d.fillRect(toX(x1), toY(z1), (x2 - x1) * scale, (z2 - z1) * scale);
+          };
+
+          ops.forEach(op => {
+            const oStart = Math.max(cursor, op.offset);
+            const oEnd = Math.min(length, op.offset + op.w);
+            if (oStart > cursor) drawSolid2D(cursor, oStart);
+
+            // Draw Joinery Symbol & Tag in 2D
+            const spec = JOINERY_SPECS[op.code] || { kind: 'opening' };
+            let cx, cz;
+            if (wall.axis === 'x') {
+              cx = wall.x1 + (oStart + oEnd) / 2;
+              cz = (wall.z1 + wall.z2) / 2;
+            } else {
+              cx = (wall.x1 + wall.x2) / 2;
+              cz = wall.z1 + (oStart + oEnd) / 2;
+            }
+
+            // Door swing arc in 2D (respects floorMarkings and doors visibility)
+            if (spec.kind === 'door' && state.visibility.floorMarkings && state.visibility.doors) {
+              ctx2d.save();
+              ctx2d.strokeStyle = '#fbbf24';
+              ctx2d.lineWidth = 1.3;
+              ctx2d.beginPath();
+              const r = (oEnd - oStart) * scale;
+              ctx2d.arc(toX(cx), toY(cz), r * 0.5, 0, Math.PI * 0.5);
+              ctx2d.stroke();
+              ctx2d.restore();
+            } else if (spec.kind === 'window' || spec.kind === 'swnv' || spec.kind === 'grill') {
+              ctx2d.strokeStyle = '#38bdf8';
+              ctx2d.lineWidth = 2;
+              if (wall.axis === 'x') {
+                ctx2d.strokeRect(toX(wall.x1 + oStart), toY(wall.z1), (oEnd - oStart) * scale, (wall.z2 - wall.z1) * scale);
+              } else {
+                ctx2d.strokeRect(toX(wall.x1), toY(wall.z1 + oStart), (wall.x2 - wall.x1) * scale, (oEnd - oStart) * scale);
+              }
+            }
+
+            // Joinery Code Pill (hides door tags if doors are removed)
+            const isDoor2D = (spec.kind === 'door' || spec.kind === 'sliding');
+            if (state.visibility.joineryLabels && (!isDoor2D || state.visibility.doors)) {
+              ctx2d.fillStyle = '#0f172a';
+              ctx2d.fillRect(toX(cx) - 14, toY(cz) - 7, 28, 14);
+              ctx2d.strokeStyle = '#38bdf8';
+              ctx2d.lineWidth = 1;
+              ctx2d.strokeRect(toX(cx) - 14, toY(cz) - 7, 28, 14);
+              ctx2d.fillStyle = '#38bdf8';
+              ctx2d.font = '600 9px "JetBrains Mono", monospace';
+              ctx2d.textAlign = 'center';
+              ctx2d.fillText(op.code, toX(cx), toY(cz) + 3);
+            }
+
+            cursor = oEnd;
+          });
+
+          if (cursor < length) drawSolid2D(cursor, length);
+        });
+
+        // 3. Draw Outer CAD Dimension Lines (6.60m Width & 5.80m Depth + Sub-chains)
+        if (state.visibility.dimensions) {
+          ctx2d.strokeStyle = '#38bdf8';
+          ctx2d.fillStyle = '#38bdf8';
+          ctx2d.lineWidth = 1.2;
+          ctx2d.font = '600 11px "JetBrains Mono", monospace';
+          ctx2d.textAlign = 'center';
+
+          // Bottom 6.60m Dimension Line
+          const by = toY(6.18);
+          ctx2d.beginPath();
+          ctx2d.moveTo(toX(0), by); ctx2d.lineTo(toX(6.60), by);
+          ctx2d.moveTo(toX(0), by - 6); ctx2d.lineTo(toX(0), by + 6);
+          ctx2d.moveTo(toX(6.60), by - 6); ctx2d.lineTo(toX(6.60), by + 6);
+          ctx2d.stroke();
+          ctx2d.fillText('6.60 m (0.2 + 3.0 + 0.1 + 3.1 + 0.2)', toX(3.30), by + 16);
+
+          // Left 5.80m Dimension Line
+          const lx = toX(-0.38);
+          ctx2d.beginPath();
+          ctx2d.moveTo(lx, toY(0)); ctx2d.lineTo(lx, toY(5.80));
+          ctx2d.moveTo(lx - 6, toY(0)); ctx2d.lineTo(lx + 6, toY(0));
+          ctx2d.moveTo(lx - 6, toY(5.80)); ctx2d.lineTo(lx + 6, toY(5.80));
+          ctx2d.stroke();
+          ctx2d.save();
+          ctx2d.translate(lx - 14, toY(2.90));
+          ctx2d.rotate(-Math.PI / 2);
+          ctx2d.fillText('5.80 m (0.2 + 2.7 + 0.2 + 2.5 + 0.2)', 0, 0);
+          ctx2d.restore();
+        }
+
+        // 4. Draw Live Camera / First-Person Avatar Frustum Indicator on 2D Plan!
+        const camX = (state.viewMode === 'walk') ? state.fp.pos.x : camera.position.x;
+        const camZ = (state.viewMode === 'walk') ? state.fp.pos.z : camera.position.z;
+        const px = toX(camX);
+        const py = toY(camZ);
+        ctx2d.save();
+        ctx2d.fillStyle = '#f59e0b';
+        ctx2d.beginPath();
+        ctx2d.arc(px, py, 6, 0, Math.PI * 2);
+        ctx2d.fill();
+        ctx2d.strokeStyle = '#ffffff';
+        ctx2d.lineWidth = 2;
+        ctx2d.stroke();
+        ctx2d.restore();
+      }
+
+      // =========================================================================
+      // 8. VIEW MODE & LIGHTING CONTROLLERS
+      // =========================================================================
+      function setViewMode(mode) {
+        state.viewMode = mode;
+        document.querySelectorAll('.mode-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.mode === mode);
+        });
+
+        const webglEl  = document.getElementById('webgl-pane');
+        const plan2dEl = document.getElementById('plan2d-pane');
+        const fpBanner = document.getElementById('fp-hud-banner');
+        const fpCross  = document.getElementById('fp-crosshair');
+        const fpTouch  = document.getElementById('fp-touch-controls');
+
+        if (mode === 'plan2d') {
+          webglEl.classList.add('hidden');
+          plan2dEl.classList.remove('hidden');
+          plan2dEl.className = 'relative flex-1 flex h-full bg-slate-950 flex-col overflow-hidden';
+        } else if (mode === 'split') {
+          webglEl.classList.remove('hidden');
+          plan2dEl.classList.remove('hidden');
+          plan2dEl.className = 'relative w-full h-2/5 md:w-2/5 md:h-full bg-slate-950 border-t md:border-t-0 md:border-l border-slate-800 flex flex-col overflow-hidden shrink-0';
+        } else {
+          webglEl.classList.remove('hidden');
+          plan2dEl.classList.add('hidden');
+        }
+
+        const isWalk = (mode === 'walk');
+        orbitControls.enabled = !isWalk;
+        fpBanner.classList.toggle('hidden', !isWalk);
+        fpCross.classList.toggle('hidden', !isWalk);
+        fpTouch.classList.toggle('hidden', !isWalk);
+
+        if (isWalk) {
+          camTween = null;
+          state.fp.walkTarget = null;
+          // Ensure walls are full height and spawn inside selected room or Hall
+          if (state.wallMode === 'none') {
+            setWallMode('full');
+          }
+          const unit = getCurrentUnitObj();
+          const rm = unit.rooms.find(r => r.id === state.selectedRoomId) || unit.rooms[0];
+          const offsetX = (state.activeUnit === 'both') ? -3.80 : 0;
+          state.fp.pos.set(offsetX + rm.spawn.x, state.fp.eyeHeight, rm.spawn.z);
+          state.fp.yaw = rm.spawn.yaw || 0;
+          state.fp.pitch = -0.04;
+          // Automatically open doors in walkthrough mode so rooms are immediately navigable
+          if (!state.doorsOpen) toggleAllDoors(true);
+          updateFirstPersonWalkthrough(0.016);
+          setTimeout(() => {
+            try { window.focus(); canvas3d.focus({ preventScroll: true }); } catch (_) {}
+          }, 20);
+        } else if (mode === 'orbit' || mode === 'split') {
+          setCameraPreset('iso');
+        }
+
+        handleResize();
+        draw2DFloorPlan();
+      }
+
+      function setWallMode(wmode) {
+        state.wallMode = wmode;
+        document.querySelectorAll('.wallmode-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.wallmode === wmode);
+        });
+        rebuildScene();
+      }
+
+      function toggleAllDoors(forceState = null) {
+        state.doorsOpen = (forceState !== null) ? forceState : !state.doorsOpen;
+        document.getElementById('doors-state-label').textContent = state.doorsOpen ? 'Doors: Open' : 'Doors: Closed';
+      }
+
+      function setLightingPreset(preset) {
+        state.lightingPreset = preset;
+        document.querySelectorAll('.light-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.light === preset);
+        });
+
+        if (preset === 'day') {
+          scene.background.setHex(0x0b0f17);
+          hemiLight.color.setHex(0xe0f2fe);
+          hemiLight.intensity = 0.72;
+          sunLight.color.setHex(0xfffbeb);
+          sunLight.intensity = 1.18;
+        } else if (preset === 'golden') {
+          scene.background.setHex(0x161118);
+          hemiLight.color.setHex(0xfed7aa);
+          hemiLight.intensity = 0.58;
+          sunLight.color.setHex(0xfb923c);
+          sunLight.intensity = 1.35;
+        } else if (preset === 'evening') {
+          scene.background.setHex(0x060911);
+          hemiLight.color.setHex(0x38bdf8);
+          hemiLight.intensity = 0.28;
+          sunLight.color.setHex(0x60a5fa);
+          sunLight.intensity = 0.25;
+        } else if (preset === 'studio') {
+          scene.background.setHex(0x111827);
+          hemiLight.color.setHex(0xffffff);
+          hemiLight.intensity = 0.95;
+          sunLight.color.setHex(0xffffff);
+          sunLight.intensity = 0.90;
+        }
+        rebuildScene();
+      }
+
+      function updateSunDirection() {
+        const rad = (state.sunAngleDeg * Math.PI) / 180;
+        const r = 13;
+        sunLight.position.set(3.3 + Math.cos(rad) * r, 13.5, 2.9 + Math.sin(rad) * r);
+      }
+
+      // =========================================================================
+      // 9. EVENT LISTENERS & RAYCASTING (3D + 2D + KEYBOARD/TOUCH)
+      // =========================================================================
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
+      let pointerDownPos = { x: 0, y: 0 };
+
+      canvas3d.addEventListener('pointerdown', (e) => {
+        pointerDownPos = { x: e.clientX, y: e.clientY };
+        if (state.viewMode === 'walk') {
+          state.fp.isDraggingLook = true;
+          state.fp.lastMouseX = e.clientX;
+          state.fp.lastMouseY = e.clientY;
+        }
+      });
+
+      window.addEventListener('pointermove', (e) => {
+        if (state.viewMode === 'walk' && state.fp.isDraggingLook) {
+          const dx = e.clientX - state.fp.lastMouseX;
+          const dy = e.clientY - state.fp.lastMouseY;
+          state.fp.lastMouseX = e.clientX;
+          state.fp.lastMouseY = e.clientY;
+          state.fp.yaw   -= dx * 0.0045;
+          state.fp.pitch  = Math.max(-1.1, Math.min(1.1, state.fp.pitch - dy * 0.0040));
+          return;
+        }
+
+        // Hover raycast on 3D floor meshes
+        const rect = canvas3d.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+          pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          raycaster.setFromCamera(pointer, camera);
+          const hits = raycaster.intersectObjects(roomFloorMeshes, false);
+          if (hits.length > 0) {
+            const { roomData, offsetX } = hits[0].object.userData;
+            const pt = hits[0].point;
+            document.getElementById('status-coords').textContent = `X: ${(pt.x - offsetX).toFixed(2)}m, Z: ${pt.z.toFixed(2)}m`;
+            document.getElementById('status-hover-info').textContent = `${roomData.name} • ${roomData.dimsText} (${roomData.areaSqm.toFixed(2)} m²)`;
+          }
+        }
+      });
+
+      window.addEventListener('pointerup', (e) => {
+        state.fp.isDraggingLook = false;
+        const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+        if (dist < 6 && e.target === canvas3d) {
+          const rect = canvas3d.getBoundingClientRect();
+          pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          raycaster.setFromCamera(pointer, camera);
+          const hits = raycaster.intersectObjects(roomFloorMeshes, false);
+          if (hits.length > 0) {
+            if (state.viewMode === 'walk') {
+              const pt = hits[0].point;
+              state.fp.walkTarget = { x: pt.x, z: pt.z };
+              try { canvas3d.focus({ preventScroll: true }); } catch (_) {}
+            } else {
+              const { roomId, unitId } = hits[0].object.userData;
+              selectRoom(roomId, unitId, false);
+            }
+          }
+        }
+      });
+
+      // 2D Canvas Interaction (Click Room to Select, Drag to Pan, Wheel to Zoom)
+      canvas2d.addEventListener('pointerdown', (e) => {
+        state.plan2d.isDragging = true;
+        state.plan2d.lastX = e.clientX;
+        state.plan2d.lastY = e.clientY;
+        pointerDownPos = { x: e.clientX, y: e.clientY };
+      });
+
+      window.addEventListener('pointermove', (e) => {
+        if (!state.plan2d.isDragging) return;
+        const dx = e.clientX - state.plan2d.lastX;
+        const dy = e.clientY - state.plan2d.lastY;
+        state.plan2d.lastX = e.clientX;
+        state.plan2d.lastY = e.clientY;
+        state.plan2d.panX += dx;
+        state.plan2d.panY += dy;
+        draw2DFloorPlan();
+      });
+
+      window.addEventListener('pointerup', (e) => {
+        if (!state.plan2d.isDragging) return;
+        state.plan2d.isDragging = false;
+        const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+        if (dist < 6 && e.target === canvas2d) {
+          const rect = canvas2d.getBoundingClientRect();
+          const { scale, ox, oy } = get2DTransform();
+          const mx = (e.clientX - rect.left - ox) / scale;
+          const mz = (e.clientY - rect.top - oy) / scale;
+          const unit = getCurrentUnitObj();
+          const hitRoom = unit.rooms.find(r => mx >= r.bounds.x1 && mx <= r.bounds.x2 && mz >= r.bounds.z1 && mz <= r.bounds.z2);
+          if (hitRoom) {
+            selectRoom(hitRoom.id, unit.id, state.viewMode === 'split');
+          }
+        }
+      });
+
+      canvas2d.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.12 : 0.89;
+        state.plan2d.zoom = Math.max(0.5, Math.min(3.0, state.plan2d.zoom * factor));
+        draw2DFloorPlan();
+      }, { passive: false });
+
+      // Mobile 2-finger pinch-to-zoom on 2D Floor Plan Canvas
+      let pinchStartDist = 0;
+      let pinchStartZoom = 1.0;
+      canvas2d.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+          state.plan2d.isDragging = false;
+          pinchStartDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          pinchStartZoom = state.plan2d.zoom;
+        }
+      }, { passive: true });
+
+      canvas2d.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2 && pinchStartDist > 10) {
+          const dist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          state.plan2d.zoom = Math.max(0.5, Math.min(3.0, pinchStartZoom * (dist / pinchStartDist)));
+          draw2DFloorPlan();
+        }
+      }, { passive: true });
+
+      // Keyboard Navigation (WASD / Arrows / E for Doors / M for Markings / R for Reset / Esc)
+      window.addEventListener('keydown', (e) => {
+        if (e.target && e.target.tagName === 'INPUT') return;
+        const code = e.code;
+        const key = (e.key || '').toLowerCase();
+        if (state.viewMode === 'walk' && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(code)) {
+          e.preventDefault();
+        }
+        if (code === 'KeyW' || key === 'w' || code === 'ArrowUp')    state.fp.keys.forward = true;
+        if (code === 'KeyS' || key === 's' || code === 'ArrowDown')  state.fp.keys.backward = true;
+        if (code === 'KeyA' || key === 'a')                          state.fp.keys.left = true;
+        if (code === 'KeyD' || key === 'd')                          state.fp.keys.right = true;
+        if (code === 'ArrowLeft' || key === 'q')                     state.fp.keys.turnLeft = true;
+        if (code === 'ArrowRight')                                   state.fp.keys.turnRight = true;
+        if (code === 'KeyE' || key === 'e')                          toggleAllDoors();
+        if (code === 'KeyX' || key === 'x')                          toggleDoorsVisibility();
+        if (code === 'KeyM' || key === 'm')                          toggleAllMarkings();
+        if (code === 'KeyR' || key === 'r')                          setCameraPreset('iso');
+        if (code === 'Escape' && state.viewMode === 'walk')          setViewMode('orbit');
+      });
+
+      window.addEventListener('keyup', (e) => {
+        const code = e.code;
+        const key = (e.key || '').toLowerCase();
+        if (code === 'KeyW' || key === 'w' || code === 'ArrowUp')    state.fp.keys.forward = false;
+        if (code === 'KeyS' || key === 's' || code === 'ArrowDown')  state.fp.keys.backward = false;
+        if (code === 'KeyA' || key === 'a')                          state.fp.keys.left = false;
+        if (code === 'KeyD' || key === 'd')                          state.fp.keys.right = false;
+        if (code === 'ArrowLeft' || key === 'q')                     state.fp.keys.turnLeft = false;
+        if (code === 'ArrowRight')                                   state.fp.keys.turnRight = false;
+      });
+
+      // Touch D-Pad and Look Buttons (supports both continuous press-and-hold and quick single click/tap)
+      document.querySelectorAll('.fp-dpad-btn').forEach(btn => {
+        const dir = btn.dataset.move;
+        const start = (e) => {
+          e.preventDefault();
+          state.fp.walkTarget = null;
+          state.fp.keys[dir] = true;
+          // Immediate step nudge so even a quick click visibly walks
+          const forwardX = -Math.sin(state.fp.yaw);
+          const forwardZ = -Math.cos(state.fp.yaw);
+          const rightX   =  Math.cos(state.fp.yaw);
+          const rightZ   = -Math.sin(state.fp.yaw);
+          const step = 0.22;
+          if (dir === 'forward')  applyFirstPersonStep(forwardX * step, forwardZ * step);
+          if (dir === 'backward') applyFirstPersonStep(-forwardX * step, -forwardZ * step);
+          if (dir === 'right')    applyFirstPersonStep(rightX * step, rightZ * step);
+          if (dir === 'left')     applyFirstPersonStep(-rightX * step, -rightZ * step);
+          updateFirstPersonWalkthrough(0.016);
+          try { canvas3d.focus({ preventScroll: true }); } catch (_) {}
+        };
+        const end = (e) => {
+          e.preventDefault();
+          state.fp.keys[dir] = false;
+        };
+        btn.addEventListener('pointerdown', start);
+        btn.addEventListener('pointerup', end);
+        btn.addEventListener('pointerleave', end);
+        btn.addEventListener('pointercancel', end);
+      });
+
+      document.querySelectorAll('.fp-look-btn').forEach(btn => {
+        const dir = btn.dataset.look === 'left' ? 'turnLeft' : 'turnRight';
+        const start = (e) => {
+          e.preventDefault();
+          state.fp.keys[dir] = true;
+          state.fp.yaw += (dir === 'turnLeft' ? 0.18 : -0.18);
+          updateFirstPersonWalkthrough(0.016);
+          try { canvas3d.focus({ preventScroll: true }); } catch (_) {}
+        };
+        const end = (e) => {
+          e.preventDefault();
+          state.fp.keys[dir] = false;
+        };
+        btn.addEventListener('pointerdown', start);
+        btn.addEventListener('pointerup', end);
+        btn.addEventListener('pointerleave', end);
+        btn.addEventListener('pointercancel', end);
+      });
+
+      // Top & Sidebar Button Wiring
+      document.querySelectorAll('.unit-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.activeUnit = btn.dataset.unit;
+          document.querySelectorAll('.unit-btn').forEach(b => b.classList.toggle('active', b === btn));
+          state.selectedRoomId = null;
+          document.getElementById('room-detail-card').classList.add('hidden');
+          document.getElementById('btn-clear-room').classList.add('hidden');
+          rebuildScene();
+          renderRoomListSidebar();
+          draw2DFloorPlan();
+          setCameraPreset('iso');
+        });
+      });
+
+      document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => setViewMode(btn.dataset.mode));
+      });
+
+      document.querySelectorAll('.wallmode-btn').forEach(btn => {
+        btn.addEventListener('click', () => setWallMode(btn.dataset.wallmode));
+      });
+
+      document.querySelectorAll('.cam-preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => setCameraPreset(btn.dataset.cam));
+      });
+
+      document.querySelectorAll('.light-btn').forEach(btn => {
+        btn.addEventListener('click', () => setLightingPreset(btn.dataset.light));
+      });
+
+      document.querySelectorAll('.speed-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.fp.speed = parseFloat(btn.dataset.speed);
+          document.querySelectorAll('.speed-btn').forEach(b => b.classList.toggle('active', b === btn));
+        });
+      });
+
+      document.querySelectorAll('.eye-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.fp.eyeHeight = parseFloat(btn.dataset.eye);
+          document.querySelectorAll('.eye-btn').forEach(b => b.classList.toggle('active', b === btn));
+        });
+      });
+
+      document.getElementById('btn-toggle-markings').addEventListener('click', () => toggleAllMarkings());
+      document.getElementById('btn-2d-toggle-markings').addEventListener('click', () => toggleAllMarkings());
+      document.getElementById('btn-sidebar-markings-all').addEventListener('click', () => toggleAllMarkings());
+      document.getElementById('btn-remove-doors').addEventListener('click', () => toggleDoorsVisibility());
+      document.getElementById('btn-fp-remove-doors').addEventListener('click', () => toggleDoorsVisibility());
+      document.getElementById('btn-toggle-doors').addEventListener('click', () => toggleAllDoors());
+      document.getElementById('btn-fp-door-interact').addEventListener('click', () => toggleAllDoors());
+      document.getElementById('btn-reset-camera').addEventListener('click', () => setCameraPreset('iso'));
+      document.getElementById('btn-exit-walk').addEventListener('click', () => setViewMode('orbit'));
+      document.getElementById('btn-clear-room').addEventListener('click', () => selectRoom(null));
+
+      document.getElementById('btn-focus-selected-room').addEventListener('click', () => {
+        const unit = getCurrentUnitObj();
+        const room = unit.rooms.find(r => r.id === state.selectedRoomId);
+        if (room) focusCameraOnRoom(room, unit.id);
+      });
+
+      document.getElementById('btn-walk-selected-room').addEventListener('click', () => {
+        setViewMode('walk');
+        const unit = getCurrentUnitObj();
+        const room = unit.rooms.find(r => r.id === state.selectedRoomId);
+        if (room) focusCameraOnRoom(room, unit.id);
+      });
+
+      // Layer Checkboxes
+      const bindVis = (id, key) => {
+        document.getElementById(id).addEventListener('change', (e) => {
+          state.visibility[key] = e.target.checked;
+          syncLayerVisibility();
+          draw2DFloorPlan();
+        });
+      };
+      bindVis('vis-ext-walls', 'extWalls');
+      bindVis('vis-int-walls', 'intWalls');
+      bindVis('vis-doors', 'doors');
+      bindVis('vis-joinery', 'joinery');
+      bindVis('vis-furniture', 'furniture');
+      bindVis('vis-lofts', 'lofts');
+      bindVis('vis-ceiling', 'ceiling');
+      bindVis('vis-room-labels', 'roomLabels');
+      bindVis('vis-joinery-labels', 'joineryLabels');
+      bindVis('vis-dimensions', 'dimensions');
+      bindVis('vis-floor-markings', 'floorMarkings');
+
+      document.getElementById('chk-fp-collision').addEventListener('change', (e) => {
+        state.fp.collision = e.target.checked;
+      });
+
+      document.getElementById('chk-2d-cad-overlay').addEventListener('change', (e) => {
+        state.plan2d.showCadOverlay = e.target.checked;
+        draw2DFloorPlan();
+      });
+
+      document.getElementById('btn-2d-zoom-in').addEventListener('click', () => {
+        state.plan2d.zoom = Math.min(3.0, state.plan2d.zoom * 1.2);
+        draw2DFloorPlan();
+      });
+      document.getElementById('btn-2d-zoom-out').addEventListener('click', () => {
+        state.plan2d.zoom = Math.max(0.5, state.plan2d.zoom / 1.2);
+        draw2DFloorPlan();
+      });
+      document.getElementById('btn-2d-reset').addEventListener('click', () => {
+        state.plan2d.zoom = 1.0;
+        state.plan2d.panX = 0;
+        state.plan2d.panY = 0;
+        draw2DFloorPlan();
+      });
+
+      // Sliders
+      document.getElementById('slider-sun-angle').addEventListener('input', (e) => {
+        state.sunAngleDeg = parseFloat(e.target.value);
+        document.getElementById('lbl-sun-angle').textContent = `${state.sunAngleDeg}°`;
+        updateSunDirection();
+      });
+
+      document.getElementById('slider-wall-height').addEventListener('input', (e) => {
+        state.wallHeight = parseFloat(e.target.value);
+        const txt = `${state.wallHeight.toFixed(2)}m`;
+        document.getElementById('lbl-wall-height').textContent = txt;
+        document.getElementById('metric-ceiling-ht').textContent = txt;
+        rebuildScene();
+      });
+
+      // CAD Reference Modal (Desktop + Mobile trigger)
+      const cadModal = document.getElementById('cad-modal');
+      document.getElementById('btn-open-cad-modal').addEventListener('click', () => cadModal.classList.remove('hidden'));
+      document.getElementById('btn-mobile-cad').addEventListener('click', () => cadModal.classList.remove('hidden'));
+      document.getElementById('btn-close-cad-modal').addEventListener('click', () => cadModal.classList.add('hidden'));
+      cadModal.addEventListener('click', (e) => { if (e.target === cadModal) cadModal.classList.add('hidden'); });
+
+      // Mobile drawer toggles & backdrop management
+      const leftSidebar = document.getElementById('left-sidebar');
+      const rightSidebar = document.getElementById('right-sidebar');
+      const drawerBackdrop = document.getElementById('mobile-drawer-backdrop');
+
+      function closeMobileDrawers() {
+        leftSidebar.classList.add('-translate-x-full');
+        rightSidebar.classList.add('translate-x-full');
+        drawerBackdrop.classList.add('hidden');
+      }
+
+      function syncDrawerBackdrop() {
+        const leftOpen = !leftSidebar.classList.contains('-translate-x-full');
+        const rightOpen = !rightSidebar.classList.contains('translate-x-full');
+        drawerBackdrop.classList.toggle('hidden', !(leftOpen || rightOpen));
+      }
+
+      document.getElementById('btn-toggle-left').addEventListener('click', () => {
+        leftSidebar.classList.toggle('-translate-x-full');
+        rightSidebar.classList.add('translate-x-full');
+        syncDrawerBackdrop();
+      });
+
+      const toggleRightDrawer = () => {
+        rightSidebar.classList.toggle('translate-x-full');
+        leftSidebar.classList.add('-translate-x-full');
+        syncDrawerBackdrop();
+      };
+      document.getElementById('btn-toggle-right').addEventListener('click', toggleRightDrawer);
+      document.getElementById('btn-toggle-right-mobile').addEventListener('click', toggleRightDrawer);
+      document.getElementById('btn-close-left-drawer').addEventListener('click', closeMobileDrawers);
+      document.getElementById('btn-close-right-drawer').addEventListener('click', closeMobileDrawers);
+      drawerBackdrop.addEventListener('click', closeMobileDrawers);
+
+      // Auto-close mobile drawer when focusing or teleporting to a room on small screens
+      ['btn-focus-selected-room', 'btn-walk-selected-room'].forEach(id => {
+        document.getElementById(id).addEventListener('click', () => {
+          if (window.innerWidth < 1024) closeMobileDrawers();
+        });
+      });
+
+      function handleResize() {
+        const rect = webglPane.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          camera.aspect = rect.width / rect.height;
+          camera.updateProjectionMatrix();
+          renderer.setSize(rect.width, rect.height, false);
+        }
+        draw2DFloorPlan();
+      }
+      window.addEventListener('resize', handleResize);
+
+      // =========================================================================
+      // 10. MAIN RENDER & ANIMATION LOOP
+      // =========================================================================
+      let lastFrameTime = performance.now();
+
+      function animate(now) {
+        requestAnimationFrame(animate);
+        const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
+        lastFrameTime = now;
+
+        // Smooth door open/close interpolation
+        const targetDoor = state.doorsOpen ? 1 : 0;
+        if (Math.abs(state.doorAnimProgress - targetDoor) > 0.002) {
+          state.doorAnimProgress += (targetDoor - state.doorAnimProgress) * Math.min(1, dt * 8);
+          doorPivots.forEach(d => {
+            const val = d.closedVal + (d.openVal - d.closedVal) * state.doorAnimProgress;
+            if (d.kind === 'hinge') d.pivot.rotation.y = val;
+            else if (d.kind === 'slideX') d.pivot.position.x = val;
+            else if (d.kind === 'slideZ') d.pivot.position.z = val;
+          });
+        }
+
+        // Camera Tweening
+        if (camTween) {
+          const t = Math.min(1, (now - camTween.startTime) / camTween.duration);
+          const ease = 1 - Math.pow(1 - t, 3);
+          camera.position.lerpVectors(camTween.startPos, camTween.endPos, ease);
+          orbitControls.target.lerpVectors(camTween.startTarget, camTween.endTarget, ease);
+          if (t >= 1) camTween = null;
+        }
+
+        if (state.viewMode === 'walk') {
+          updateFirstPersonWalkthrough(dt);
+          if (state.viewMode === 'split') draw2DFloorPlan();
+        } else if (state.viewMode !== 'plan2d') {
+          orbitControls.update();
+        }
+
+        if (state.viewMode !== 'plan2d') {
+          renderer.render(scene, camera);
+          update3DLabelsProjection();
+        }
+      }
+
+      // Initialize application
+      function init() {
+        document.getElementById('loading-bar').style.width = '75%';
+        initMaterials();
+        updateSunDirection();
+        rebuildScene();
+        renderRoomListSidebar();
+        handleResize();
+        setCameraPreset('iso');
+
+        document.getElementById('loading-bar').style.width = '100%';
+        setTimeout(() => {
+          const overlay = document.getElementById('loading-overlay');
+          overlay.style.opacity = '0';
+          setTimeout(() => overlay.classList.add('hidden'), 450);
+        }, 250);
+
+        requestAnimationFrame(animate);
+      }
+
+      if (document.readyState === 'loading') {
+        window.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+</body>
+</html>
