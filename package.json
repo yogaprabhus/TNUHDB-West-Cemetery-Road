@@ -1,0 +1,20 @@
+{
+  "name": "tnuhdb-3d-floorplan-explorer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interactive 3D & 2D Architectural Visualization for TNUHDB West Cemetery Road Unit Plan (Sheet 02/15)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.160.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12"
+  }
+}
